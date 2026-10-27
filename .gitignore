@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.db
+debug_last_response.json
+.venv/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml

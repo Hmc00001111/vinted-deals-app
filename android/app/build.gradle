@@ -1,0 +1,74 @@
+plugins {
+    id "com.android.application"
+    id "com.chaquo.python"
+}
+
+android {
+    namespace "com.houssem.vinteddeals"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.houssem.vinteddeals"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+        ndk {
+            // téléphones actuels + émulateurs
+            abiFilters "arm64-v8a", "x86_64"
+        }
+    }
+
+    // Clé de signature fixe : permet d'installer les mises à jour par-dessus l'ancienne version.
+    signingConfigs {
+        release {
+            storeFile file("vinted-deals.keystore")
+            storePassword "vinteddeals"
+            keyAlias "vinteddeals"
+            keyPassword "vinteddeals"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    // L'interface HTML est partagée avec la version PC
+    sourceSets {
+        main {
+            assets.srcDirs = ["src/main/assets", "../../vinted_deals/templates"]
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        version = "3.12"
+        pip {
+            install("flask")
+            install("requests")
+        }
+    }
+    // Le code Python est exactement celui de la version PC
+    sourceSets {
+        getByName("main") {
+            srcDir("../../vinted_deals")
+        }
+    }
+}

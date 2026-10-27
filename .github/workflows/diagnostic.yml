@@ -24,7 +24,7 @@ jobs:
         run: pip install requests curl_cffi
       - name: Interroger les sites
         working-directory: vinted_deals
-        run: python probe.py "${{ github.event.inputs.query || 'nike' }}" > ../report.json
+        run: python probe2.py > ../report.json
       - name: Publier le rapport (branche diag-results)
         run: |
           git config user.name "diagnostic-bot"

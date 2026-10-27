@@ -39,9 +39,16 @@ class DepopSource(Source):
             if not cur:
                 return []
             params["cursor"] = cur
-        headers = dict(JSON_HEADERS, Origin=self.home, Referer=self.home + "/")
+        headers = dict(JSON_HEADERS, Origin=self.home, Referer=self.home + "/search/")
+        if not getattr(self, "_warmed", False):
+            # L'API exige les cookies d'une vraie visite du site (v3 est fermée depuis 2026)
+            try:
+                s.get(self.home + "/", headers=HTML_HEADERS, timeout=20)
+            except Exception:
+                pass
+            self._warmed = True
         last = None
-        for path in ("/api/v3/search/products/", "/api/v2/search/products/"):
+        for path in ("/api/v2/search/products/",):
             try:
                 r = s.get("https://webapi.depop.com" + path, params=params, headers=headers, timeout=20)
             except Exception as e:
@@ -83,6 +90,10 @@ class DepopSource(Source):
             if isinstance(price_obj, dict) else money(price_obj)
         currency = (first(price_obj, "currencyName", "currency_name", "currency", default="EUR")
                     if isinstance(price_obj, dict) else "EUR")
+        if amount is None:
+            amount = money(first(p, "pricing.original_price.price_breakdown.price.amount",
+                                 "pricing.discounted_price.price_breakdown.price.amount"))
+            currency = first(p, "pricing.currency_name", default=currency)
         if not pid or amount is None:
             return None
         pics = p.get("pictures") or p.get("preview") or p.get("pictures_data") or []
@@ -101,6 +112,7 @@ class DepopSource(Source):
             url=f"{self.home}/products/{slug}/" if slug else self.home,
             brand=str(brand), size=size, status=cond.replace("_", " ").lower(),
             status_id=guess_status(cond), photo=photos[0] if photos else None, photos=photos,
+            favourites=int(p.get("like_count") or 0),
             seller=str(first(p, "seller.username", "sellerUsername", default="") or ""),
             published_at=parse_ts(p.get("dateCreated") or p.get("date_created") or p.get("created")),
             description=str(p.get("description") or "")[:600], raw=p,

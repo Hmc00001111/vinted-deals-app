@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from .base import (HTML_HEADERS, JSON_HEADERS, Item, Source, SourceError, check_response,
-                   extract_next_data, first, guess_status, money, parse_ts, to_eur, walk)
+                   extract_next_data, first, guess_status, make_session, money, parse_ts, to_eur,
+                   walk)
 
 IMG = "https://images.vestiairecollective.com/images/resized/w=480,q=75,f=auto,"
 
@@ -23,6 +24,12 @@ class VestiaireSource(Source):
     label = "Vestiaire Collective"
     description = "Luxe et vêtements de créateurs d'occasion"
     home = "https://fr.vestiairecollective.com"
+
+    def get_session(self):
+        # Testé : l'API de recherche accepte requests mais refuse l'empreinte curl_cffi.
+        if self.session is None:
+            self.session = make_session(impersonate=False)
+        return self.session
 
     def search(self, query: str, page: int = 1, category: str | None = None) -> list[Item]:
         self.throttle()
@@ -84,7 +91,10 @@ class VestiaireSource(Source):
         photos = [u for u in (_pic(x) for x in pics) if u][:4]
         link = p.get("link") or p.get("path") or ""
         url = link if str(link).startswith("http") else (self.home + "/" + str(link).lstrip("/") if link else self.home)
-        cond = str(first(p, "condition.description", "condition.name", "condition", default="") or "")
+        cond = first(p, "condition.label", "condition.description", "condition.name", "condition", default="") or ""
+        if isinstance(cond, dict):
+            cond = cond.get("label") or cond.get("description") or ""
+        cond = str(cond)
         size = first(p, "size.size", "size.localizedSize", "size.label", default="")
         if isinstance(p.get("size"), str):
             size = p["size"]

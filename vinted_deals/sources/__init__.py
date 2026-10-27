@@ -4,7 +4,8 @@ from __future__ import annotations
 from .base import Blocked, Item, Source, SourceError, STATUS_LABELS
 from .depop import DepopSource
 from .ebay import EbaySource
-from .generic import JaiioSource, SellpySource, StockXSource
+from .generic import JaiioSource, StockXSource
+from .sellpy import SellpySource
 from .grailed import GrailedSource
 from .leboncoin import LeboncoinSource
 from .vestiaire import VestiaireSource

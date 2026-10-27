@@ -179,15 +179,6 @@ class GenericSource(Source):
         raise errors[-1] if errors else SourceError(f"{self.label} : aucune annonce lisible")
 
 
-class SellpySource(GenericSource):
-    key = "sellpy"
-    label = "Sellpy"
-    description = "Seconde main généraliste"
-    home = "https://www.sellpy.fr"
-    search_paths = [("/search", "query"), ("/search", "q")]
-    url_template = "{home}/item/{path}"
-
-
 class JaiioSource(GenericSource):
     key = "jaiio"
     label = "Jaiio"

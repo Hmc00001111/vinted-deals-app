@@ -88,7 +88,7 @@ class DB:
                 seen_at, updated_at, matches, score, discount, ref_price, is_deal, reasons, ai_status, notified)
             SELECT 'vinted', CAST(vinted_id AS TEXT), watch_id, title, brand, size, status, price,
                 price, total_price, currency, url, photo,
-                CASE WHEN photo IS NULL THEN '[]' ELSE json_array(photo) END,
+                CASE WHEN photo IS NULL THEN '[]' ELSE '["' || photo || '"]' END,
                 favourites, seller, published_at, seen_at, seen_at, matches, score, discount, ref_price,
                 is_deal, reasons, 'skipped', 1
             FROM items_v1""")

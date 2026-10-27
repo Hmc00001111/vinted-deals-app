@@ -80,21 +80,48 @@ def _extract_json(text: str) -> dict:
         raise AIError("Réponse de Gemini illisible")
 
 
+class SlowModel(AIError):
+    pass
+
+
+def _thinking(model: str, effort: str) -> dict | None:
+    """Réglage de « réflexion » : on la réduit, sinon un modèle récent peut mettre 30 s+ à répondre."""
+    m = model.lower()
+    if m.startswith("gemini-2.5"):
+        return {"thinkingBudget": 0 if "flash" in m else 128}
+    if m.startswith("gemini-3") or m.startswith("gemini-4"):
+        return {"thinkingLevel": effort}
+    return None
+
+
 def call_gemini(key: str, model: str, prompt: str, images: list[tuple[str, bytes]] | None = None,
-                json_mode: bool = True, timeout: int = 60) -> str:
+                json_mode: bool = True, timeout: int = 90, effort: str = "low") -> str:
     parts: list[dict] = [{"text": prompt}]
     for mime, data in images or []:
         parts.append({"inline_data": {"mime_type": mime, "data": base64.b64encode(data).decode()}})
-    body: dict = {"contents": [{"role": "user", "parts": parts}],
-                  "generationConfig": {"temperature": 0.2}}
+    gen: dict = {"temperature": 0.2}
     if json_mode:
-        body["generationConfig"]["responseMimeType"] = "application/json"
-    r = requests.post(API.format(model=model), json=body, timeout=timeout,
-                      headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+        gen["responseMimeType"] = "application/json"
+    think = _thinking(model, effort)
+    if think:
+        gen["thinkingConfig"] = think
+    body: dict = {"contents": [{"role": "user", "parts": parts}], "generationConfig": gen}
+    for attempt in range(2):
+        try:
+            r = requests.post(API.format(model=model), json=body, timeout=(15, timeout),
+                              headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+        except requests.Timeout:
+            raise SlowModel(f"{model} met trop de temps à répondre")
+        if r.status_code == 400 and "thinkingConfig" in gen and "think" in r.text.lower():
+            gen.pop("thinkingConfig")  # modèle qui n'accepte pas ce réglage : on réessaie sans
+            continue
+        break
     if r.status_code == 404:
         raise ModelNotFound(f"Modèle « {model} » introuvable")
     if r.status_code == 429:
         raise RateLimited("Quota Gemini atteint, nouvelle tentative plus tard")
+    if r.status_code in (500, 502, 503, 504):
+        raise SlowModel(f"{model} est surchargé (HTTP {r.status_code})")
     if r.status_code in (400, 401, 403):
         msg = ""
         try:
@@ -116,6 +143,41 @@ def call_gemini(key: str, model: str, prompt: str, images: list[tuple[str, bytes
     texts = [p.get("text", "") for p in (cands[0].get("content") or {}).get("parts", [])
              if not p.get("thought")]
     return "".join(texts)
+
+
+def list_models(key: str) -> list[str]:
+    """Modèles accessibles avec cette clé (réponse immédiate, sans génération)."""
+    try:
+        r = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
+                         params={"pageSize": 1000}, headers={"x-goog-api-key": key}, timeout=(10, 20))
+    except requests.RequestException as e:
+        raise AIError(f"Connexion à Google impossible : {e.__class__.__name__}")
+    if r.status_code in (400, 401, 403):
+        raise AIError("Clé Gemini refusée : vérifie-la (copie-la en entier depuis AI Studio)")
+    if r.status_code >= 400:
+        raise AIError(f"Gemini : HTTP {r.status_code}")
+    out = []
+    for m in r.json().get("models") or []:
+        name = str(m.get("name", "")).replace("models/", "")
+        if "generateContent" in (m.get("supportedGenerationMethods") or []) and name.startswith("gemini"):
+            out.append(name)
+    return out
+
+
+def _version(name: str) -> tuple:
+    import re as _re
+    m = _re.search(r"gemini-(\d+(?:\.\d+)?)", name)
+    return (float(m.group(1)) if m else 0.0,)
+
+
+def candidate_models(preferred: str | None, available: list[str] | None) -> list[str]:
+    """Ordre d'essai : le modèle choisi, puis les « flash » disponibles du plus récent au plus ancien."""
+    base = [preferred or DEFAULT_MODEL] + FALLBACK_MODELS
+    if available:
+        flash = [m for m in available if "flash" in m and not any(x in m for x in ("image", "tts", "audio", "live", "exp"))]
+        flash.sort(key=lambda m: (_version(m), "lite" not in m, "preview" not in m), reverse=True)
+        base = ([preferred] if preferred in available else []) + flash + [m for m in base if m in available]
+    return list(dict.fromkeys(m for m in base if m))
 
 
 def fetch_image(url: str) -> tuple[str, bytes] | None:
@@ -149,6 +211,7 @@ class Analyzer(threading.Thread):
         self.q: queue.Queue[int] = queue.Queue()
         self.recent: list[float] = []
         self.status = {"last_error": None, "model": None, "analysed": 0, "queued": 0}
+        self.available: list[str] | None = None
 
     def settings(self) -> dict:
         s = dict(DEFAULT_SETTINGS)
@@ -237,31 +300,47 @@ class Analyzer(threading.Thread):
             lines.append("- (aucune photo n'a pu être téléchargée : juge sur le texte et choisis plutôt a_verifier)")
         prompt = PROMPT.format(context="\n".join(lines))
 
-        models = [s.get("gemini_model") or DEFAULT_MODEL] + FALLBACK_MODELS
-        if self.status.get("model"):
-            models.insert(0, self.status["model"])
-        tried = []
-        for model in dict.fromkeys(models):
+        if self.available is None:
             try:
-                text = call_gemini(s["gemini_key"], model, prompt, images)
+                self.available = list_models(s["gemini_key"])
+            except AIError:
+                self.available = []
+        models = candidate_models(self.status.get("model") or s.get("gemini_model"), self.available or None)
+        problems = []
+        for model in models[:4]:
+            try:
+                text = call_gemini(s["gemini_key"], model, prompt, images, effort="low")
                 self.status["model"] = model
                 return _extract_json(text)
-            except ModelNotFound:
-                tried.append(model)
+            except (ModelNotFound, SlowModel) as e:
+                problems.append(str(e))
                 continue
-        raise AIError("Aucun modèle Gemini disponible (essayés : " + ", ".join(tried) + ")")
+        raise AIError("Gemini indisponible pour le moment (" + " ; ".join(problems[:2]) + ")")
 
 
 def test_key(key: str, model: str) -> dict:
-    """Vérifie la clé avec une requête minuscule. Renvoie {'ok': bool, 'model': ..., 'message': ...}."""
-    for m in dict.fromkeys([model or DEFAULT_MODEL] + FALLBACK_MODELS):
+    """Vérifie la clé (liste des modèles, instantané) puis fait un mini essai de génération."""
+    try:
+        available = list_models(key)
+    except AIError as e:
+        return {"ok": False, "model": None, "message": str(e)}
+    if not available:
+        return {"ok": False, "model": None, "message": "Clé valide mais aucun modèle Gemini accessible avec ce compte"}
+    slow = []
+    for m in candidate_models(model, available)[:4]:
         try:
-            txt = call_gemini(key, m, "Réponds uniquement par le mot OK.", json_mode=False, timeout=30)
-            return {"ok": True, "model": m, "message": f"Clé valide — modèle {m} ({txt.strip()[:20]})"}
-        except ModelNotFound:
+            txt = call_gemini(key, m, "Réponds uniquement par le mot OK.", json_mode=False,
+                              timeout=45, effort="minimal")
+            return {"ok": True, "model": m, "models": available,
+                    "message": f"Clé valide ✓ — modèle utilisé : {m}"}
+        except (ModelNotFound, SlowModel) as e:
+            slow.append(m)
             continue
+        except RateLimited:
+            return {"ok": True, "model": m, "models": available,
+                    "message": "Clé valide ✓ — quota momentanément atteint, l'analyse reprendra toute seule"}
         except AIError as e:
             return {"ok": False, "model": m, "message": str(e)}
-        except requests.RequestException as e:
-            return {"ok": False, "model": m, "message": f"Connexion impossible : {e}"}
-    return {"ok": False, "model": None, "message": "Aucun modèle Gemini disponible pour cette clé"}
+    return {"ok": True, "model": None, "models": available,
+            "message": "Clé valide ✓, mais Gemini répond lentement en ce moment (" + ", ".join(slow) +
+                       "). L'analyse réessaiera automatiquement."}

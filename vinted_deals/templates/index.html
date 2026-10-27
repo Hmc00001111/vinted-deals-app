@@ -484,7 +484,7 @@ $("#s-save2").onclick = async () => { await saveSettings(); sMsg("Options enregi
 $("#s-ai").onchange = async () => { await saveSettings(); loadStatus(); };
 $("#s-clear").onclick = async () => { if (!confirm("Effacer la clé Gemini ?")) return; await saveSettings({ clear_key: true }); sMsg("Clé effacée.", true); loadStatus(); };
 $("#s-test").onclick = async () => {
-  sMsg("Test en cours…", true);
+  sMsg("Test en cours… (jusqu’à 1 min)", true);
   const key = $("#s-key").value.trim();
   if (key) await saveSettings();
   const r = await api("/api/settings/test-ai", { method: "POST", body: JSON.stringify({}) });

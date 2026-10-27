@@ -1,0 +1,38 @@
+name: Diagnostic des sites
+
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: "Recherche de test"
+        default: "nike"
+  push:
+    branches: [diag]
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer
+        run: pip install requests curl_cffi
+      - name: Interroger les sites
+        working-directory: vinted_deals
+        run: python probe.py "${{ github.event.inputs.query || 'nike' }}" > ../report.json
+      - name: Publier le rapport (branche diag-results)
+        run: |
+          git config user.name "diagnostic-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p /tmp/out && cp report.json /tmp/out/
+          git checkout --orphan diag-results
+          git rm -rf . > /dev/null
+          cp /tmp/out/report.json .
+          git add report.json
+          git commit -m "Rapport de diagnostic ${GITHUB_SHA::7}"
+          git push -f origin diag-results

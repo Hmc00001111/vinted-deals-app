@@ -17,16 +17,21 @@ _started = False
 log = logging.getLogger("vinted.android")
 
 
-def _android_notify(item, watch, verdict) -> None:
+def _android_notify(row, ai, priority) -> None:
     from java import jclass  # fourni par Chaquopy
 
     notifier = jclass("com.houssem.vinteddeals.Notifier")
-    discount = f" (−{verdict.discount:.0%})" if verdict.discount and verdict.discount > 0 else ""
-    title = f"{item.price:.2f} €{discount} · {item.title}"[:120]
-    details = " · ".join(x for x in (item.brand, item.size, item.status) if x)
-    body = "\n".join(x for x in (details, " · ".join(verdict.reasons[:2]),
-                                 f"Score {verdict.score:.0f}/100 — {watch['name']}") if x)
-    notifier.deal(int(item.id), title, body, item.url)
+    discount = f" (−{row['discount']:.0%})" if row.get("discount") and row["discount"] > 0 else ""
+    title = f"{'⭐ ' if priority else ''}{row['price']:.2f} €{discount} · {row['title']}"[:120]
+    details = " · ".join(x for x in (row.get("source_label"), row.get("brand"), row.get("size"), row.get("status")) if x)
+    lines = [details]
+    if ai:
+        from ai import VERDICTS
+        note = f" {ai['note']:.0f}/10" if isinstance(ai.get("note"), (int, float)) else ""
+        lines.append(f"Gemini : {VERDICTS.get(ai.get('verdict'), '')}{note} — {ai.get('resume') or ''}")
+    lines.append(" · ".join((row.get("reasons") or [])[:2]))
+    lines.append(f"Score {row.get('score', 0):.0f}/100 — {row.get('watch_name', '')}")
+    notifier.deal(int(row["id"]), title, "\n".join(x for x in lines if x), row["url"], bool(priority))
 
 
 def start(files_dir: str, html: str, port: int,
@@ -46,11 +51,10 @@ def start(files_dir: str, html: str, port: int,
     import app as web
     import monitor as mon
     from db import DB
-    from vinted_client import VintedClient
 
     web.app.jinja_loader = DictLoader({"index.html": html})
     web.db = DB(os.path.join(files_dir, "vinted_deals.db"))
-    web.monitor = mon.Monitor(web.db, VintedClient(domain), interval=interval)
+    web.monitor = mon.Monitor(web.db, interval=interval, domain=domain)
     mon.NOTIFY_HOOKS.append(_android_notify)
     web.monitor.start()
 

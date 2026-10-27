@@ -66,6 +66,8 @@ class SellpySource(Source):
         price_raw = first(h, "price_FR.amount", "price_FR", "price_EUR.amount", "price_EUR", "price.amount", "price")
         currency = first(h, "price_FR.currency", "price_EUR.currency", "price.currency", "currency", default="EUR")
         price = money(price_raw)
+        if price is not None and isinstance(price_raw, int):
+            price = price / 100  # Sellpy stocke les prix en centimes (1900 = 19,00 €)
         if not oid or price is None:
             return None
         meta = h.get("metadata") or {}
@@ -77,6 +79,8 @@ class SellpySource(Source):
         imgs = h.get("images") or h.get("imageUrls") or []
         photos = [i if isinstance(i, str) else first(i, "url", "src", default="") for i in imgs][:4]
         photos = [p for p in photos if p]
+        if not title or title == brand:
+            title = " ".join(x for x in (str(first(meta, "type", default="") or ""), str(brand)) if x)
         cond = str(first(h, "metadata.condition", "condition", "quality", default="") or "")
         size = first(h, "metadata.size", "size", default="") or ""
         return Item(

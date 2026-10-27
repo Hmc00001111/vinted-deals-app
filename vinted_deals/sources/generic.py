@@ -180,12 +180,57 @@ class GenericSource(Source):
 
 
 class JaiioSource(GenericSource):
+    """Boutique Shopify : on lit les derniers produits mis en ligne et on filtre sur la recherche."""
     key = "jaiio"
     label = "Jaiio"
     description = "Mode de seconde main, marques premium"
     home = "https://www.jaiio.fr"
     search_paths = [("/search", "q"), ("/recherche", "q"), ("/", "s")]
     url_template = "{home}/products/{path}"
+
+    def search(self, query: str, page: int = 1, category: str | None = None) -> list[Item]:
+        if page > 2:
+            return []
+        self.throttle()
+        s = self.get_session()
+        words = [w for w in query.lower().split() if w]
+        try:
+            r = s.get(self.home + "/collections/all/products.json",
+                      params={"sort_by": "created-descending", "limit": "250", "page": str(page)},
+                      headers=JSON_HEADERS, timeout=25)
+            check_response(r, self.label)
+            products = r.json().get("products") or []
+        except Exception:
+            return super().search(query, page, category)
+        out = []
+        for p in products:
+            text = f"{p.get('title', '')} {p.get('vendor', '')} {p.get('product_type', '')} {' '.join(p.get('tags') or [])}".lower()
+            if words and not all(w in text for w in words):
+                continue
+            variants = p.get("variants") or [{}]
+            avail = [v for v in variants if v.get("available", True)]
+            if not avail:
+                continue  # déjà vendu
+            price = money(avail[0].get("price"))
+            if price is None:
+                continue
+            imgs = [i.get("src") for i in (p.get("images") or []) if i.get("src")][:4]
+            body = re.sub("<[^>]+>", " ", p.get("body_html") or "")
+            size = " / ".join(str(v.get("title")) for v in avail[:3] if v.get("title") not in (None, "Default Title"))
+            out.append(Item(source=self.key, id=str(p.get("id")), title=p.get("title") or "",
+                            price=price, orig_price=price, url=f"{self.home}/products/{p.get('handle')}",
+                            brand=p.get("vendor") or "", size=size, status=guess_status_label(body),
+                            status_id=guess_status(body), photo=imgs[0] if imgs else None, photos=imgs,
+                            published_at=parse_ts(p.get("published_at") or p.get("created_at")),
+                            category=str(p.get("product_type") or ""), description=" ".join(body.split())[:600],
+                            raw={k: p.get(k) for k in ("id", "title", "vendor", "product_type", "tags", "handle")}))
+        return out
+
+
+def guess_status_label(text: str) -> str:
+    sid = guess_status(text)
+    from .base import STATUS_LABELS
+    return STATUS_LABELS.get(sid, "") if sid else ""
 
 
 class StockXSource(GenericSource):

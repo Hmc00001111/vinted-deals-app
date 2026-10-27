@@ -258,9 +258,9 @@ def guess_status(text: str) -> int | None:
         (1, ("neuf sans", "without tags", "nwot", "jamais porté", "never worn", "neuf", "new", "is_new",
              "etatneuf")),
         (2, ("très bon", "tres bon", "very good", "excellent", "gently used", "is_gently_used",
-             "like new", "comme neuf", "tresbonetat")),
-        (3, ("bon état", "bon etat", "good", "used", "occasion", "is_used", "pre-owned", "bonetat")),
-        (4, ("satisfaisant", "fair", "worn", "is_worn", "acceptable", "abîmé", "etatsatisfaisant")),
+             "like new", "comme neuf", "tresbonetat", "très bien", "tres bien")),
+        (3, ("bon état", "bon etat", "good", "used", "occasion", "is_used", "pre-owned", "bonetat", "bien")),
+        (4, ("satisfaisant", "fair", "worn", "is_worn", "acceptable", "abîmé", "etatsatisfaisant", "correct")),
     ]
     for sid, keys in rules:
         if any(k in t for k in keys):

@@ -12,7 +12,8 @@ import statistics
 import unicodedata
 from dataclasses import dataclass, field
 
-from vinted_client import Item
+from categories import matches_category, parse_categories
+from sources.base import Item
 
 DEFAULT_RARE_KEYWORDS = [
     "vintage", "rare", "edition limitee", "limited edition", "deadstock", "collector",
@@ -61,7 +62,11 @@ def brand_ok(item: Item, watch: dict) -> bool:
     if not brands:
         return True
     b = norm(item.brand)
-    return any(b == x or x in b for x in brands)
+    if b:
+        return any(b == x or x in b for x in brands)
+    # Certains sites (eBay, Leboncoin…) ne renseignent pas la marque : on regarde le titre.
+    title = norm(item.title)
+    return any(contains_word(title, x) for x in brands)
 
 
 def excluded_by(item: Item, watch: dict) -> str | None:
@@ -83,7 +88,12 @@ def matches_filters(item: Item, watch: dict) -> bool:
     if status_ids and item.status_id not in status_ids:
         return False
     sizes = parse_list(watch.get("sizes"))
-    if sizes and norm(item.size) not in sizes:
+    if sizes and item.size and norm(item.size) not in sizes:
+        return False
+    if sizes and not item.size:
+        return False
+    cats = parse_categories(watch.get("categories"))
+    if cats and not matches_category(item.title, item.category, cats):
         return False
     return True
 
@@ -97,7 +107,7 @@ class Verdict:
     reasons: list[str] = field(default_factory=list)
 
 
-def evaluate(item: Item, watch: dict, samples: list[float]) -> Verdict:
+def evaluate(item: Item, watch: dict, samples: list[float], samples_label: str = "") -> Verdict:
     reasons: list[str] = []
     score = 20.0
 
@@ -107,7 +117,8 @@ def evaluate(item: Item, watch: dict, samples: list[float]) -> Verdict:
     if ref:
         discount = 1 - item.price / ref
         score += max(-40.0, min(60.0, discount * 100))
-        origin = "votre prix de référence" if manual_ref else f"médiane de {len(samples)} annonces"
+        origin = "votre prix de référence" if manual_ref else \
+            f"médiane de {len(samples)} annonces{samples_label}"
         if discount > 0:
             reasons.append(f"{discount:.0%} sous le marché ({ref:.0f} €, {origin})")
         else:

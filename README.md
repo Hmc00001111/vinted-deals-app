@@ -1,7 +1,8 @@
 # Vinted Deals
 
-Surveille en continu les nouvelles annonces Vinted et fait remonter les bonnes affaires
-(prix sous le marché, articles rares) selon tes filtres : marque, mots-clés, prix, état, taille.
+Surveille en continu les nouvelles annonces de Vinted, Vestiaire Collective, Grailed, Sellpy, Jaiio, Leboncoin, Depop, eBay et StockX et fait remonter les bonnes affaires
+(prix sous le marché, articles rares) selon tes filtres : sites, marque, mots-clés, prix, état, taille,
+catégories, fréquence de scan — puis Gemini analyse les photos des meilleures annonces.
 
 - `vinted_deals/` : le programme Python (version PC) — voir `vinted_deals/README.md`.
 - `android/` : l'application Android. Elle embarque **le même code Python** (via Chaquopy),

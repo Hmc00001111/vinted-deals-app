@@ -96,7 +96,7 @@ revente populaires » en propose une vingtaine.
 
 Données mobiles : le suivi des ventes fait par défaut 60 vérifications par heure (réglable).
 
-## 🤖 Robot (appli Android)
+## 🤖 Robot (appli Android et PC)
 
 Le robot agit sur **ton compte Vinted** via un navigateur intégré à l'appli : tu t'y connectes
 toi-même (onglet Robot → « Connexion Vinted »), ton mot de passe reste sur ton téléphone.
@@ -112,6 +112,12 @@ toi-même (onglet Robot → « Connexion Vinted »), ton mot de passe reste sur 
   la page) pour adapter le robot si Vinted change son site.
 - **Stock & bénéfices** : achats ajoutés automatiquement, statut (reçu, en vente, vendu), prix de
   revente, bénéfice réel, rentabilité et délai de revente.
+
+**Sur PC** : le robot pilote une fenêtre Chrome dédiée (profil mémorisé dans le dossier
+`vinted-robot-profile`). Onglet Robot → « Connexion Vinted » : la fenêtre s'ouvre, tu te connectes
+une fois, c'est mémorisé. Les achats que tu lances toi-même s'arrêtent toujours sur la page de
+paiement, dans cette fenêtre. Installation : `pip install playwright` puis `playwright install chromium`
+(Google Chrome est utilisé s'il est installé).
 
 ⚠️ Les conditions de Vinted interdisent les robots depuis le 8 octobre 2026 : risque de suspension
 du compte. Utilise de préférence un compte dédié aux achats et des budgets raisonnables.

@@ -2,3 +2,5 @@ flask>=3.0
 requests>=2.31
 # Recommandé : aide à passer les protections anti-robot (Leboncoin, Depop, eBay…)
 curl_cffi>=0.7
+# Robot sur PC (optionnel) : pip install playwright  puis  playwright install chromium
+playwright>=1.40

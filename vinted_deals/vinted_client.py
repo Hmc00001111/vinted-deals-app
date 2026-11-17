@@ -323,3 +323,128 @@ class VintedClient:
             return out
 
         raise VintedError(f"Vinted ne répond pas ({last_error})")
+
+    # ---------- état d'une annonce (vendue ? toujours en ligne ?) ----------
+    # Routes JSON candidates pour le détail d'une annonce. La bonne est découverte une fois
+    # (avec une annonce qu'on sait en ligne) puis mémorisée ; à défaut on lit la page HTML.
+    ITEM_ROUTES = [
+        "{api}/svc-catalogue/items/{id}",
+        "{base}/api/v2/items/{id}/details",
+        "{base}/api/v2/items/{id}",
+        "{api}/svc-items/items/{id}",
+    ]
+    HTML_LIMIT = 700_000  # on n'a pas besoin de toute la page (économie de données sur téléphone)
+
+    item_route: str | None = None   # route JSON validée, ou "html"
+
+    def _get(self, url: str, **kw):
+        if self.session is None:
+            self._new_session()
+        self._throttle()
+        return self.session.get(url, timeout=20, **kw)
+
+    def discover_item_route(self, known_active_id: int | str) -> str:
+        """Trouve une route de détail qui marche, en testant sur une annonce en ligne."""
+        for tpl in self.ITEM_ROUTES:
+            url = tpl.format(api=self.api, base=self.base, id=known_active_id)
+            try:
+                r = self._get(url, headers=self._api_headers())
+            except requests.RequestException:
+                continue
+            if r.status_code == 200 and str(known_active_id) in r.text[:200_000]:
+                try:
+                    r.json()
+                except ValueError:
+                    continue
+                self.item_route = tpl
+                log.info("Détail d'annonce Vinted : %s", tpl)
+                return tpl
+            if r.status_code in (401, 403, 429):
+                break
+        self.item_route = "html"
+        log.info("Détail d'annonce Vinted : lecture de la page HTML")
+        return "html"
+
+    def item_state(self, item_id: int | str) -> dict | None:
+        """{'state': 'active'|'reserved'|'sold'|'removed', 'price': float|None, 'favourites': int|None}
+        ou None si on ne sait pas dire (page illisible). Lève VintedError en cas de blocage."""
+        route = self.item_route or "html"
+        if route != "html":
+            url = route.format(api=self.api, base=self.base, id=item_id)
+            r = self._get(url, headers=self._api_headers())
+            if r.status_code in (401, 403, 429):
+                self.session = None
+                raise VintedError(f"HTTP {r.status_code} (détail annonce)")
+            if r.status_code in (404, 410):
+                return {"state": "removed", "price": None, "favourites": None}
+            if r.status_code == 200:
+                return parse_item_state(r.text)
+            return None
+        # page HTML de l'annonce (lecture partielle)
+        page_headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Accept-Language": f"{self.locale},en;q=0.5"}
+        r = self._get(f"{self.base}/items/{item_id}", headers=page_headers, stream=True, allow_redirects=True)
+        try:
+            if r.status_code in (403, 429):
+                self.session = None
+                raise VintedError(f"HTTP {r.status_code} (page annonce)")
+            if r.status_code in (404, 410):
+                return {"state": "removed", "price": None, "favourites": None}
+            if f"/items/{item_id}" not in r.url:  # redirigé vers le catalogue : annonce supprimée
+                return {"state": "removed", "price": None, "favourites": None}
+            chunks, size = [], 0
+            for chunk in r.iter_content(65536, decode_unicode=False):
+                chunks.append(chunk)
+                size += len(chunk)
+                text = b"".join(chunks).decode("utf-8", "ignore")
+                st = parse_item_state(text, partial=True)
+                if st and st["state"] != "unknown" and st.get("price") is not None:
+                    return st
+                if size > self.HTML_LIMIT:
+                    break
+            st = parse_item_state(b"".join(chunks).decode("utf-8", "ignore"))
+            return st if st and st["state"] != "unknown" else None
+        finally:
+            r.close()
+
+
+import re as _re
+
+_B = r'\\?"'  # guillemet éventuellement échappé (données Next.js / RSC)
+
+
+def _flag(text: str, key: str) -> bool | None:
+    m = _re.search(_B + key + _B + r"\s*:\s*(true|false)", text)
+    return None if not m else m.group(1) == "true"
+
+
+def parse_item_state(text: str, partial: bool = False) -> dict | None:
+    """Repère l'état d'une annonce dans un JSON d'API ou une page HTML Vinted."""
+    if not text:
+        return None
+    t = text
+    state = "unknown"
+    closing = _re.search(_B + r"item_closing_action" + _B + r"\s*:\s*" + _B + r"(\w+)", t)
+    is_closed, is_reserved = _flag(t, "is_closed"), _flag(t, "is_reserved")
+    is_hidden = _flag(t, "is_hidden")
+    avail = _re.search(r"schema\.org/(InStock|SoldOut|OutOfStock|Discontinued|LimitedAvailability)", t)
+    if (closing and closing.group(1).lower() == "sold") or (avail and avail.group(1) == "SoldOut"):
+        state = "sold"
+    elif is_closed:
+        state = "sold" if not is_hidden else "removed"
+    elif avail and avail.group(1) in ("OutOfStock", "Discontinued"):
+        state = "sold"
+    elif is_reserved:
+        state = "reserved"
+    elif is_closed is False or (avail and avail.group(1) in ("InStock", "LimitedAvailability")):
+        state = "active"
+    price = None
+    m = _re.search(_B + r"price" + _B + r"\s*:\s*\{[^{}]*?" + _B + r"amount" + _B + r"\s*:\s*" + _B +
+                   r"?([0-9]+(?:\.[0-9]+)?)", t) or \
+        _re.search(r'"price"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?\s*,\s*"priceCurrency"', t)
+    if m:
+        price = float(m.group(1))
+    fav = _re.search(_B + r"favourite_count" + _B + r"\s*:\s*(\d+)", t)
+    if state == "unknown" and partial:
+        return {"state": "unknown", "price": price, "favourites": int(fav.group(1)) if fav else None}
+    return {"state": state, "price": price, "favourites": int(fav.group(1)) if fav else None}

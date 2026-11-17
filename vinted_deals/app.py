@@ -13,10 +13,14 @@ import webbrowser
 
 from flask import Flask, jsonify, render_template, request
 
+import analyst
 from ai import DEFAULT_MODEL, DEFAULT_SETTINGS, test_key
 from categories import CATEGORIES, category_meta
 from db import DB
+from market import DEFAULT_MARKET_SETTINGS, POPULAR_TERMS
 from monitor import MIN_INTERVAL, Monitor
+from product import ITEM_TYPES
+from valuation import FLAG_LABELS, basis_text
 from scoring import DEFAULT_EXCLUDE_KEYWORDS, DEFAULT_RARE_KEYWORDS
 from sources import SOURCES, STATUS_LABELS, source_meta
 from sources.base import has_cffi
@@ -84,6 +88,7 @@ def clean_watch(data: dict, partial: bool = False) -> dict:
 
 def public_settings() -> dict:
     s = dict(DEFAULT_SETTINGS)
+    s.update(DEFAULT_MARKET_SETTINGS)
     s.update(db.settings())
     key = s.pop("gemini_key", "") or ""
     s["gemini_key_set"] = bool(key)
@@ -103,7 +108,9 @@ def meta():
     return jsonify(sources=source_meta(), categories=category_meta(),
                    intervals=[{"value": v, "label": l} for v, l in INTERVALS],
                    statuses=[{"id": k, "label": v} for k, v in STATUS_LABELS.items()],
-                   default_interval=monitor.default_interval, cffi=has_cffi(), default_model=DEFAULT_MODEL)
+                   default_interval=monitor.default_interval, cffi=has_cffi(), default_model=DEFAULT_MODEL,
+                   types=[{"key": k, "label": v["label"]} for k, v in ITEM_TYPES.items()],
+                   flags=FLAG_LABELS, popular_terms=POPULAR_TERMS)
 
 
 @app.get("/api/watches")
@@ -156,7 +163,8 @@ def status():
     st = dict(monitor.status)
     st["sources"] = {k: dict(v) for k, v in monitor.status["sources"].items()}
     return jsonify({**st, **db.counts(), "interval": monitor.default_interval,
-                    "ai": monitor.ai.status | {"ready": monitor.ai.ready()}})
+                    "ai": monitor.ai.status | {"ready": monitor.ai.ready()},
+                    "market_counts": db.market_counts(), "tracker": dict(monitor.tracker.status)})
 
 
 @app.post("/api/scan")
@@ -189,6 +197,18 @@ def save_settings():
         out["notify_mode"] = data["notify_mode"]
     if "priority_score" in data:
         out["priority_score"] = max(0, min(100, float(_num(data["priority_score"]) or 85)))
+    # veille marché, suivi des ventes, pépites
+    if "market_terms" in data:
+        out["market_terms"] = _join(data["market_terms"])
+    bounds = {"market_interval": (120, 86400), "tracker_per_hour": (10, 1200), "gems_notify_score": (0, 100),
+              "gems_ai_score": (0, 100), "buy_fee_fixed": (0, 50), "buy_fee_pct": (0, 50), "ship_in": (0, 100),
+              "sell_fee_pct": (0, 60), "resale_factor": (0.3, 1.5), "min_profit": (0, 10000)}
+    for k, (lo, hi) in bounds.items():
+        if k in data and data[k] not in (None, ""):
+            out[k] = max(lo, min(hi, float(_num(data[k]))))
+    for k in ("tracker_enabled", "gems_auto_ai"):
+        if k in data:
+            out[k] = bool(data[k])
     db.set_settings(out)
     return jsonify(public_settings())
 
@@ -203,6 +223,67 @@ def test_ai():
     if res["ok"] and res.get("model"):
         db.set_settings({"gemini_model": res["model"]})
     return jsonify(res)
+
+
+# ---------- analyste & pépites ----------
+def _arg(name):
+    v = request.args.get(name)
+    return v.strip() if v and v.strip() else None
+
+
+@app.get("/api/analyst")
+def analyst_view():
+    days = max(1 / 24, min(90.0, float(_num(request.args.get("days")) or 7)))
+    res = analyst.top_sellers(db, monitor.market.idx, days, brand=_arg("brand"), itype=_arg("type"),
+                              source=_arg("source"))
+    return jsonify(res)
+
+
+@app.get("/api/analyst/similar")
+def analyst_similar():
+    ref = _num(request.args.get("ref"))
+    return jsonify(analyst.similar_to_buy(db, monitor.market.idx, request.args.get("key", ""), ref,
+                                          monitor.market.settings()))
+
+
+@app.get("/api/gems")
+def gems_view():
+    return jsonify(analyst.gems(
+        db, budget=_num(request.args.get("budget")), min_profit=_num(request.args.get("min_profit")),
+        itype=_arg("type"), brand=_arg("brand"), source=_arg("source"),
+        min_conf=float(_num(request.args.get("min_conf")) or 0), sort=request.args.get("sort") or "score",
+        fresh_days=float(_num(request.args.get("fresh")) or 3)))
+
+
+@app.get("/api/brands")
+def brands_view():
+    idx = monitor.market.idx
+    with idx.lock:
+        top = [b for b, n in idx.brand_count.most_common(300) if n > 0 and b]
+    return jsonify(top)
+
+
+@app.get("/api/listings/<int:lid>")
+def listing_view(lid):
+    res = monitor.market.comparables(lid)
+    if not res:
+        return jsonify(error="Annonce introuvable"), 404
+    val = res["valuation"]
+    return jsonify(listing=analyst.public_listing(res["listing"]), valuation=val,
+                   basis=basis_text(val) if val else None, demand=res["demand"], flip=res["flip"],
+                   flag_labels=[FLAG_LABELS.get(f, f) for f in res["flags"]],
+                   comparables=[analyst.public_listing(c) for c in res["comparables"]])
+
+
+@app.post("/api/listings/<int:lid>/identify")
+def listing_identify(lid):
+    if not monitor.ai.ready():
+        return jsonify(ok=False, message="Ajoute ta clé Gemini dans les réglages pour utiliser l'identification."), 400
+    if not db.get_listing(lid):
+        return jsonify(ok=False, message="Annonce introuvable"), 404
+    db.update_listing(lid, {"ai_status": "pending"})
+    monitor.ai.enqueue(("identify", lid))
+    return jsonify(ok=True, message="Identification lancée (Gemini + recherche Google)…")
 
 
 def main():

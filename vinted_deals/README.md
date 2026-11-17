@@ -57,6 +57,45 @@ Clé gratuite sur https://aistudio.google.com/apikey, à coller dans **Réglages
 dans la base locale. Le nombre d'analyses par heure est limité (30 par défaut) pour rester
 dans le quota gratuit ; le modèle est choisi automatiquement s'il n'existe plus.
 
+## Valeur estimée (articles similaires)
+
+La valeur d'un article n'est plus la moyenne de la marque : elle est calculée à partir des annonces
+**les plus proches** — même marque **et** même type (pull, jean, veste, doudoune, baskets…), même
+**modèle** (mots distinctifs : Detroit, 501, Nuptse, cachemire…, les mots rares comptant plus),
+prix ramenés au même **état**, couleur, fraîcheur de l'observation. Les articles **réellement vendus**
+comptent double et corrigent l'écart entre prix demandés et prix de vente. Chaque valeur a une
+fourchette, le nombre de comparables et un indice de confiance (bouton « Valeur & comparables »).
+
+Le bouton **🤖 Identifier** envoie les photos à Gemini avec la **recherche Google** : modèle exact,
+référence, prix neuf, prix d'occasion constatés (avec les sources), authenticité. Son estimation est
+combinée à celle des comparables.
+
+## 📊 Analyste
+
+Classe les articles **les plus vendus** sur 24 h, 7 jours ou 30 jours (filtres type / marque), groupés
+par marque + type + modèle : nombre de ventes, prix de vente médian, délai de vente, taux
+d'écoulement, tendance des prix. Pour chaque groupe : **les annonces très similaires à acheter
+maintenant**, avec la marge attendue.
+
+Les ventes sont détectées en **re-vérifiant** les annonces Vinted vues (3 h, 8 h, 24 h, 48 h après,
+puis tous les 3 jours pendant 30 jours) : une annonce qui passe « vendue » donne un vrai prix et un
+vrai délai de vente. Tant qu'il n'y a pas assez de ventes, le classement se fait sur les favoris.
+
+## 💎 Pépites
+
+Pour chaque annonce en vente : coût réel (prix + protection acheteur + port), revente visée
+(un peu sous la valeur), **bénéfice net**, rentabilité, **probabilité de revendre et délai** d'après
+les ventes détectées, confiance. Le score combine bénéfice espéré, rentabilité, vitesse et
+confiance, et pénalise les risques (prix suspect, marque très contrefaite non vérifiée, peu de
+données). Alerte (notification) au-dessus d'un score réglable ; les meilleures sont identifiées
+automatiquement par Gemini.
+
+**Veille marché** (Réglages) : liste de marques / mots-clés scannés en continu sur Vinted pour
+nourrir l'analyste et trouver des pépites en dehors de tes surveillances. Le bouton « Marques de
+revente populaires » en propose une vingtaine.
+
+Données mobiles : le suivi des ventes fait par défaut 120 vérifications par heure (réglable).
+
 ## Catégories
 
 Vêtements, Chaussures & sneakers, Sacs & maroquinerie, Accessoires, Montres & bijoux.
@@ -70,7 +109,8 @@ l'annonce est filtrée sur les mots de son titre.
 
 ## Diagnostic
 
-`python probe.py nike > rapport.json` interroge chaque site et indique ce qui passe.
+`python probe.py nike > rapport.json` interroge chaque site et indique ce qui passe, et teste la
+détection des ventes Vinted (section `vinted_item_check`).
 
 ## Limites
 

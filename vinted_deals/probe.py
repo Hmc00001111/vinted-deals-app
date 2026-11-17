@@ -83,6 +83,34 @@ def run_source(cls, cffi: bool) -> dict:
     return res
 
 
+def probe_vinted_items() -> dict:
+    """Vérifie la détection des ventes : routes de détail d'une annonce et lecture de son état."""
+    from vinted_client import VintedClient, parse_item_state
+    out: dict = {"routes": []}
+    try:
+        c = VintedClient("www.vinted.fr")
+        items = c.search(QUERY)
+        out["search_count"] = len(items)
+        if not items:
+            return out
+        ids = [it.id for it in items[:3]]
+        for tpl in c.ITEM_ROUTES + ["{base}/items/{id}"]:
+            url = tpl.format(api=c.api, base=c.base, id=ids[0])
+            try:
+                r = c._get(url, headers=c._api_headers() if "/items/" not in tpl[-12:] or "api" in tpl else {})
+                out["routes"].append({"route": tpl, "status": r.status_code, "length": len(r.text),
+                                      "has_id": str(ids[0]) in r.text, "state": parse_item_state(r.text),
+                                      "head": r.text[:400]})
+            except Exception as e:
+                out["routes"].append({"route": tpl, "error": f"{type(e).__name__}: {e}"})
+        out["chosen_route"] = c.discover_item_route(ids[0])
+        out["states"] = {str(i): c.item_state(i) for i in ids}
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+        out["trace"] = traceback.format_exc()[-1500:]
+    return out
+
+
 def main() -> None:
     report = {"query": QUERY, "time": time.time(), "has_cffi": base.has_cffi(),
               "ip": None, "results": [], "discovery": {}}
@@ -97,6 +125,9 @@ def main() -> None:
                   file=sys.stderr)
         report["discovery"][cls.key] = [discover(u, c) for u in DISCOVERY.get(cls.key, [])
                                         for c in ([True, False] if base.has_cffi() else [False])]
+    report["vinted_item_check"] = probe_vinted_items()
+    print("vinted item check ->", report["vinted_item_check"].get("chosen_route"),
+          report["vinted_item_check"].get("states"), file=sys.stderr)
     json.dump(report, sys.stdout, ensure_ascii=False, indent=1, default=str)
 
 

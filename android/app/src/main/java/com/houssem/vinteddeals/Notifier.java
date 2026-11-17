@@ -46,6 +46,36 @@ public final class Notifier {
         nm.createNotificationChannel(service);
     }
 
+    /** Notification du robot. checkout = paiement à valider : ouvre la page de paiement dans l'appli. */
+    public static void robot(long actionId, String title, String text, String url, boolean checkout) {
+        Context c = app;
+        if (c == null) return;
+        try {
+            Intent open = new Intent(c, RobotActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            open.putExtra(RobotActivity.EXTRA_URL, url);
+            if (checkout) {
+                open.putExtra(RobotActivity.EXTRA_ACTION,
+                        "{\"id\":" + actionId + ",\"kind\":\"watch_paid\",\"url\":" + org.json.JSONObject.quote(url) + "}");
+            }
+            PendingIntent pi = PendingIntent.getActivity(c, (int) (2_000_000 + actionId % 1_000_000), open,
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            Notification n = new Notification.Builder(c, checkout ? CHANNEL_PRIORITY : CHANNEL_DEALS)
+                    .setSmallIcon(R.drawable.ic_stat)
+                    .setColor(checkout ? 0xFFFF5C5C : 0xFFC9A7FF)
+                    .setContentTitle(title)
+                    .setContentText(text)
+                    .setStyle(new Notification.BigTextStyle().bigText(text))
+                    .setContentIntent(pi)
+                    .setAutoCancel(true)
+                    .setWhen(System.currentTimeMillis())
+                    .setShowWhen(true)
+                    .build();
+            c.getSystemService(NotificationManager.class).notify((int) (2_000_000 + actionId % 1_000_000), n);
+        } catch (Exception e) {
+            Log.w("VintedDeals", "Notification robot impossible", e);
+        }
+    }
+
     /** Appelée depuis Python (android_main.py) pour chaque bonne affaire. */
     public static void deal(long itemId, String title, String text, String url) {
         deal(itemId, title, text, url, false);

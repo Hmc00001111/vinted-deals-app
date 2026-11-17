@@ -34,6 +34,12 @@ def _android_notify(row, ai, priority) -> None:
     notifier.deal(int(row["id"]), title, "\n".join(x for x in lines if x), row["url"], bool(priority))
 
 
+def _robot_notify(aid, title, text, url, checkout) -> None:
+    from java import jclass
+
+    jclass("com.houssem.vinteddeals.Notifier").robot(int(aid), title[:120], text or "", url or "", bool(checkout))
+
+
 def start(files_dir: str, html: str, port: int,
           domain: str = "www.vinted.fr", interval: int = 60) -> None:
     global _started
@@ -56,6 +62,7 @@ def start(files_dir: str, html: str, port: int,
     web.db = DB(os.path.join(files_dir, "vinted_deals.db"))
     web.monitor = mon.Monitor(web.db, interval=interval, domain=domain)
     mon.NOTIFY_HOOKS.append(_android_notify)
+    mon.ROBOT_HOOKS.append(_robot_notify)
     web.monitor.start()
 
     server = threading.Thread(

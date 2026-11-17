@@ -155,6 +155,29 @@
   .st.sold { background: #123522; color: var(--good); } .st.active { background: var(--panel2); color: var(--muted); }
   textarea { width: 100%; min-height: 64px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
 
+  /* ---------- robot & marques ---------- */
+  main.tab-robot { grid-template-columns: 1fr; }
+  main.tab-robot > aside, main.tab-robot #feed-view { display: none; }
+  main.tab-robot #robot-view { display: block; }
+  .robot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .status-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+  .status-dot.on { background: var(--good); } .status-dot.off { background: var(--bad); }
+  .act { display: grid; grid-template-columns: 48px 1fr auto; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; align-items: start; }
+  .act img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; background: #222; }
+  .act .btns { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; } .act .btns button { font-size: 11px; padding: 3px 7px; }
+  .stt { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; background: var(--panel2); color: var(--muted); white-space: nowrap; }
+  .stt.paid, .stt.sent, .stt.accepted { background: #123522; color: var(--good); }
+  .stt.checkout { background: #3a2a0c; color: var(--warn); } .stt.failed, .stt.refused { background: #3a1414; color: var(--bad); }
+  .stt.running, .stt.pending { background: #13343a; color: var(--accent); }
+  .pf { display: grid; grid-template-columns: 48px 1fr auto; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; align-items: center; }
+  .pf img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; background: #222; }
+  .pf select, .pf input { width: auto; padding: 4px 6px; font-size: 12px; }
+  .ac-wrap { position: relative; }
+  .ac-list { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; max-height: 260px; overflow: auto; margin-top: 2px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .ac-list div { padding: 7px 10px; cursor: pointer; font-size: 13px; } .ac-list div:hover, .ac-list div.sel { background: #0c2a2c; color: var(--accent); }
+  .ac-msg { font-size: 12px; min-height: 0; margin-top: 3px; } .ac-msg.ok { color: var(--good); } .ac-msg.fix { color: var(--warn); } .ac-msg.err { color: var(--bad); }
+  .warnbox { border: 1px solid #5a4520; background: #2a2210; color: #f3d7a0; padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-top: 8px; }
+
   /* ---------- téléphone ---------- */
   @media (max-width: 900px) {
     header { padding: 10px 12px; }
@@ -179,6 +202,7 @@
     #gems { grid-template-columns: 1fr; }
     #gems .card img { aspect-ratio: 4/3; }
     .kpis { grid-template-columns: 1fr 1fr; } .kpi b { font-size: 16px; }
+    .robot-grid { grid-template-columns: 1fr; }
     .tabs button { font-size: 11px; padding: 10px 2px; line-height: 1.3; }
     .tabs button.on { color: var(--accent); box-shadow: inset 0 2px 0 var(--accent); }
     .only-mobile { display: inline; }
@@ -198,6 +222,7 @@
       <button type="button" data-tab="feed" class="on">🔥 Annonces</button>
       <button type="button" data-tab="analyst">📊 Analyste</button>
       <button type="button" data-tab="gems">💎 Pépites</button>
+      <button type="button" data-tab="robot">🤖 Robot</button>
     </div>
     <button class="ghost" id="notif-btn">🔔 Notifications</button>
     <button class="ghost" id="scan-btn">↻ Scanner</button>
@@ -214,8 +239,9 @@
         <input type="text" name="name" placeholder="ex. Carhartt Detroit vintage">
         <label class="f">Mots-clés</label>
         <input type="text" name="search_text" placeholder="ex. veste detroit">
-        <label class="f">Marques (séparées par des virgules)</label>
-        <input type="text" name="brands" placeholder="ex. Carhartt, Stone Island">
+        <label class="f">Marques (choisis dans la liste, ou tape : les fautes sont corrigées)</label>
+        <div class="ac-wrap"><input type="text" name="brands" id="w-brands" placeholder="ex. Carhartt, Stone Island" autocomplete="off"></div>
+        <div class="ac-msg" id="w-brands-msg"></div>
 
         <label class="f">Moteurs de recherche (sites à surveiller)</label>
         <div class="sites" id="sites-box"></div>
@@ -396,12 +422,97 @@
     <div class="grid" id="gems"></div>
     <div class="empty" id="gems-empty" hidden>Pas encore de pépite. Ajoute des marques dans « Veille marché » (onglet Réglages) : la valeur des articles se construit au fil des scans, et les ventes détectées affinent la demande.</div>
   </section>
+  <section id="robot-view" class="view">
+    <div class="robot-grid">
+      <div>
+        <div class="panel">
+          <h2>Compte Vinted</h2>
+          <div id="rb-conn" class="meta">…</div>
+          <div class="row" style="margin-top:8px" id="rb-conn-btns">
+            <button type="button" id="rb-login">🔑 Connexion Vinted</button>
+          </div>
+          <p class="hint">Tu te connectes toi-même dans le navigateur intégré à l'appli : ton mot de passe reste sur ton téléphone. Conseil : utilise un compte dédié aux achats.</p>
+        </div>
+        <div class="panel">
+          <h2>Mode du robot</h2>
+          <div class="seg" id="rb-mode">
+            <button type="button" data-v="off">⏹ Arrêt</button>
+            <button type="button" data-v="offers">💬 Offres auto</button>
+            <button type="button" data-v="auto">⚡ Achat auto</button>
+          </div>
+          <p class="hint" id="rb-mode-help"></p>
+          <label class="f">Paiement</label>
+          <div class="seg" id="rb-pay">
+            <button type="button" data-v="manual">✋ Je valide</button>
+            <button type="button" data-v="auto">💳 Automatique</button>
+          </div>
+          <div class="warnbox" id="rb-warn">⚠️ Vinted interdit les robots depuis le 8 octobre 2026 et peut suspendre les comptes qui en utilisent. Garde des budgets raisonnables.</div>
+          <div class="row" style="margin-top:10px">
+            <button type="button" class="ghost" id="rb-pause1">⏸ Pause 1 h</button>
+            <button type="button" class="ghost" id="rb-pause24">⏸ Pause 24 h</button>
+            <button type="button" class="ghost" id="rb-resume" hidden>▶ Reprendre</button>
+          </div>
+          <div class="kpis" style="margin-top:12px" id="rb-today"></div>
+        </div>
+        <div class="panel">
+          <h2>Règles</h2>
+          <div class="row">
+            <div><label class="f">Score pépite min</label><input type="number" id="rb-score" min="0" max="100"></div>
+            <div><label class="f">Bénéfice net min (€)</label><input type="number" id="rb-profit" min="0"></div>
+          </div>
+          <div class="row">
+            <div><label class="f">Prix max par article (€)</label><input type="number" id="rb-maxitem" min="1"></div>
+            <div><label class="f">Confiance min</label>
+              <select id="rb-conf"><option value="0.3">Faible</option><option value="0.5">Moyenne</option><option value="0.7">Haute</option></select></div>
+          </div>
+          <div class="row">
+            <div><label class="f">Budget / jour (€)</label><input type="number" id="rb-budget" min="0"></div>
+            <div><label class="f">Achats / jour</label><input type="number" id="rb-items" min="0"></div>
+            <div><label class="f">Offres / jour</label><input type="number" id="rb-offers" min="0"></div>
+          </div>
+          <label class="f">Marques autorisées (vide = toutes)</label>
+          <div class="ac-wrap"><input type="text" id="rb-brands" placeholder="ex. Carhartt, Ralph Lauren" autocomplete="off"></div>
+          <div class="ac-msg" id="rb-brands-msg"></div>
+          <label class="toggle"><input type="checkbox" id="rb-ai"> Marques très contrefaites : n'acheter que si Gemini juge l'article authentique</label>
+          <label class="f">Message envoyé avec les offres ({article}, {offre} et {prix} sont remplacés)</label>
+          <textarea id="rb-tpl"></textarea>
+          <div class="row" style="margin-top:10px"><button type="button" id="rb-save">Enregistrer</button></div>
+          <div class="msg" id="rb-msg"></div>
+        </div>
+      </div>
+      <div>
+        <div class="panel">
+          <h2>Journal du robot</h2>
+          <div id="rb-actions"><div class="meta">Aucune action pour l'instant.</div></div>
+        </div>
+        <div class="panel">
+          <h2>Stock & bénéfices</h2>
+          <div class="kpis" id="pf-stats"></div>
+          <div id="pf-items"></div>
+          <details style="margin-top:10px"><summary>Ajouter un achat fait à la main</summary>
+            <label class="f">Article</label><input type="text" id="pf-title" placeholder="ex. Veste Carhartt Detroit">
+            <div class="row">
+              <div><label class="f">Prix payé (€)</label><input type="number" id="pf-price" step="0.5"></div>
+              <div><label class="f">Coût total (€, frais et port)</label><input type="number" id="pf-cost" step="0.5"></div>
+            </div>
+            <div class="row" style="margin-top:8px"><button type="button" id="pf-add">Ajouter</button></div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <dialog id="offer-dlg">
+    <div class="dlg-head"><b id="of-title">Négocier</b><button type="button" class="ghost" onclick="$('#offer-dlg').close()">✕</button></div>
+    <div class="dlg-body" id="of-body"></div>
+  </dialog>
 </main>
 
 <nav class="tabs">
   <button type="button" data-tab="feed" class="on">🔥<br>Annonces</button>
   <button type="button" data-tab="analyst">📊<br>Analyste</button>
   <button type="button" data-tab="gems">💎<br>Pépites</button>
+  <button type="button" data-tab="robot">🤖<br>Robot</button>
   <button type="button" data-tab="watches">🔎<br>Recherches</button>
   <button type="button" data-tab="settings">⚙️<br>Réglages</button>
 </nav>
@@ -439,9 +550,11 @@ function showTab(name) {
   $("#main").className = "tab-" + name;
   $$(".tabs button, .views button").forEach(b => b.classList.toggle("on", b.dataset.tab === name ||
     (b.parentElement.classList.contains("views") && b.dataset.tab === "feed" && ["watches", "settings"].includes(name))));
+  if (name === "watches") setTimeout(() => $("#w-brands") && 0, 0);
   window.scrollTo(0, 0);
   if (name === "analyst") loadAnalyst();
   if (name === "gems") loadGems();
+  if (name === "robot") loadRobot();
 }
 $$(".tabs button, .views button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
@@ -584,7 +697,8 @@ function card(it, isNew) {
       ${aiBlock(it)}
       <ul class="reasons">${reasons}</ul>
       <div class="meta">vue ${ago(it.seen_at)}${it.market_state === "sold" ? " · <b style='color:var(--bad)'>vendu</b>" : ""}</div>
-      ${it.listing_id ? `<div class="card-actions"><button class="ghost" onclick="openListing(${it.listing_id})">🔍 Valeur & comparables</button></div>` : ""}
+      ${it.listing_id ? `<div class="card-actions"><button class="ghost" onclick="openListing(${it.listing_id})">🔍 Valeur & comparables</button>
+        <button class="ghost" onclick="openOffer(${it.listing_id}, 'offer')">💬 Négocier</button><button class="ghost" onclick="openOffer(${it.listing_id}, 'buy')">⚡ Acheter</button></div>` : ""}
     </div></div>`;
 }
 
@@ -833,6 +947,8 @@ function gemCard(l) {
       ${(l.flag_labels || []).length ? `<ul class="flags">${l.flag_labels.map(f => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}
       ${aiIdent(l)}
       <div class="card-actions">
+        <button class="ghost" onclick="openOffer(${l.id}, 'offer')">💬 Négocier</button>
+        <button class="ghost" onclick="openOffer(${l.id}, 'buy')">⚡ Acheter</button>
         <button class="ghost" onclick="openListing(${l.id})">🔍 Comparables</button>
         ${l.ai_status !== "done" && l.ai_status !== "pending" ? `<button class="ghost" onclick="identify(${l.id})">🤖 Identifier (Gemini + Google)</button>` : ""}
         <a class="ghost" href="${esc(l.url)}" target="_blank" rel="noopener">Ouvrir ↗</a>
@@ -885,6 +1001,8 @@ async function openListing(id) {
         </table>
         ${(r.flag_labels || []).length ? `<ul class="flags">${r.flag_labels.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
         <div class="card-actions">
+          <button class="ghost" onclick="openOffer(${l.id}, 'offer')">💬 Négocier</button>
+          <button class="ghost" onclick="openOffer(${l.id}, 'buy')">⚡ Acheter</button>
           ${l.ai_status !== "pending" ? `<button class="ghost" onclick="identify(${l.id})">🤖 ${l.ai_status === "done" ? "Ré-identifier" : "Identifier"} avec Gemini + Google</button>` : ""}
           <a class="ghost" href="${esc(l.url)}" target="_blank" rel="noopener">Ouvrir l'annonce ↗</a>
         </div>
@@ -933,6 +1051,201 @@ function marketStats(s) {
     (s.market && s.market.error ? `<br><span style="color:var(--warn)">Veille : ${esc(s.market.error)}</span>` : "");
 }
 setInterval(() => { if (currentTab === "gems" && !$("#dlg").open && !document.hidden) loadGems(); }, 30000);
+
+// ---------- marques : liste déroulante + correction ----------
+function brandAC(input, msgEl) {
+  const wrap = input.parentElement;
+  let list = null, items = [], sel = -1, timer = null;
+  const tokens = () => input.value.split(",");
+  const current = () => tokens().pop().trim();
+  const close = () => { if (list) list.remove(); list = null; sel = -1; };
+  function setToken(name) {
+    const t = tokens(); t[t.length - 1] = " " + name;
+    input.value = t.map(x => x.trim()).filter(Boolean).join(", ") + ", ";
+    close(); input.focus();
+  }
+  async function show() {
+    const q = current();
+    items = await api("/api/brands/suggest?" + new URLSearchParams({ q, limit: q ? 12 : 40 })).catch(() => []);
+    close();
+    if (!items.length || document.activeElement !== input) return;
+    list = document.createElement("div"); list.className = "ac-list";
+    list.innerHTML = items.map((b, i) => `<div data-i="${i}">${esc(b)}</div>`).join("");
+    list.onmousedown = e => { const d = e.target.closest("[data-i]"); if (d) { e.preventDefault(); setToken(items[+d.dataset.i]); } };
+    wrap.appendChild(list);
+  }
+  async function verifyAll() {
+    const names = input.value.split(",").map(x => x.trim()).filter(Boolean);
+    if (!names.length) { msgEl.textContent = ""; return; }
+    msgEl.className = "ac-msg"; msgEl.textContent = "Vérification des marques…";
+    const res = await Promise.all(names.map(n => api("/api/brands/verify", { method: "POST", body: JSON.stringify({ name: n }) })
+      .catch(() => ({ status: "unknown", name: n }))));
+    const out = [], notes = [];
+    for (let k = 0; k < names.length; k++) {
+      const n = names[k], r = res[k];
+      out.push(r.name || n);
+      if (r.status === "corrected") notes.push(["fix", `« ${n} » → ${r.name}`]);
+      else if (r.status === "verified") notes.push(["ok", `${r.name} : vérifiée sur Vinted et ajoutée à la liste`]);
+      else if (r.status === "unknown") notes.push(["err", `« ${n} » : marque introuvable${(r.suggestions || []).length ? " — tu voulais dire " + r.suggestions.slice(0, 3).join(", ") + " ?" : ""}`]);
+    }
+    input.value = [...new Set(out)].join(", ");
+    msgEl.className = "ac-msg " + (notes.some(n => n[0] === "err") ? "err" : notes.length ? "fix" : "ok");
+    msgEl.textContent = notes.length ? notes.map(n => n[1]).join(" · ") : "✓ " + out.join(", ");
+  }
+  input.addEventListener("focus", show);
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(show, 150); });
+  input.addEventListener("keydown", e => {
+    if (!list) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault(); sel = Math.max(0, Math.min(items.length - 1, sel + (e.key === "ArrowDown" ? 1 : -1)));
+      [...list.children].forEach((d, i) => d.classList.toggle("sel", i === sel));
+    } else if (e.key === "Enter" && sel >= 0) { e.preventDefault(); setToken(items[sel]); }
+    else if (e.key === "Escape") close();
+  });
+  input.addEventListener("blur", () => setTimeout(() => { close(); input.value = input.value.replace(/,\s*$/, ""); verifyAll(); }, 150));
+}
+brandAC($("#w-brands"), $("#w-brands-msg"));
+brandAC($("#rb-brands"), $("#rb-brands-msg"));
+
+// ---------- négocier / acheter ----------
+async function openOffer(id, kind) {
+  const [o, d] = await Promise.all([api(`/api/listings/${id}/offer`), api(`/api/listings/${id}`)]);
+  const l = d.listing;
+  $("#of-title").textContent = (kind === "buy" ? "Acheter : " : "Négocier : ") + l.title;
+  const rules = (o.rules || []);
+  $("#of-body").innerHTML = `
+    <div class="dlg-top">
+      <img src="${esc(l.photo || "")}" alt="" referrerpolicy="no-referrer">
+      <div>
+        <div class="price">${fmt(l.price)}</div>
+        <div class="meta">${esc([l.brand, l.type_label, l.size, l.status].filter(Boolean).join(" · "))}</div>
+        ${l.value ? `<div class="val-line" style="margin-top:6px">Valeur ≈ <b>${fmt(Math.round(l.value))}</b> · bénéfice à ce prix <b class="${(l.profit || 0) >= 0 ? "pos" : "neg"}">${fmt(Math.round(l.profit || 0))}</b></div>` : ""}
+        <table class="calc">
+          <tr><td>Offre conseillée</td><td><b>${fmt(o.offer)}</b> (−${pct(o.discount)})</td></tr>
+          ${o.max_price != null ? `<tr><td>Prix max pour garder ton bénéfice</td><td>${fmt(o.max_price)}</td></tr>` : ""}
+        </table>
+        <ul class="reasons">${o.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
+        ${rules.length ? `<p class="note">Le robot automatique ne la prendrait pas : ${esc(rules.join(", "))}</p>` : ""}
+      </div>
+    </div>
+    ${kind === "offer" ? `
+      <label class="f">Montant de l'offre (€)</label><input type="number" id="of-amount" step="0.5" value="${o.offer}">
+      <label class="f">Message au vendeur</label><textarea id="of-msg">${esc(o.message)}</textarea>` : ""}
+    <div class="card-actions" style="margin-top:12px">
+      ${IN_APP ? `<button type="button" onclick="sendAction(${id}, '${kind}')">${kind === "buy" ? "⚡ Lancer l'achat (tu valides le paiement)" : "💬 Envoyer l'offre avec le robot"}</button>` : ""}
+      ${kind === "offer" ? `<button type="button" class="ghost" onclick="copyAndOpen('${esc(l.url)}')">📋 Copier le message et ouvrir Vinted</button>`
+        : `<a class="ghost" href="${esc(l.url)}" target="_blank" rel="noopener" style="padding:6px 10px">Ouvrir sur Vinted ↗</a>`}
+    </div>
+    ${!IN_APP ? `<p class="hint">Sur PC, le robot ne clique pas à ta place : c'est l'appli Android qui exécute les offres et les achats.</p>` : ""}`;
+  $("#offer-dlg").showModal();
+}
+function copyAndOpen(url) {
+  const m = $("#of-msg") ? $("#of-msg").value : "";
+  try { navigator.clipboard.writeText(m); } catch (e) {}
+  if (IN_APP && window.Android) Android.openVinted(url); else window.open(url, "_blank");
+}
+async function sendAction(id, kind) {
+  const body = { kind };
+  if (kind === "offer") { body.amount = $("#of-amount").value; body.message = $("#of-msg").value; }
+  const a = await api(`/api/listings/${id}/action`, { method: "POST", body: JSON.stringify(body) });
+  $("#offer-dlg").close();
+  if (window.Android) Android.runAction(JSON.stringify(Object.assign({}, a, { pay: false })));
+}
+
+// ---------- onglet robot ----------
+let RB = null;
+const ACT_LABEL = { pending: "en attente", running: "en cours", sent: "envoyée", checkout: "paiement à valider", paid: "payé",
+  accepted: "acceptée", refused: "refusée", failed: "échec", cancelled: "annulée" };
+const MODE_HELP = { off: "Le robot n'agit pas tout seul. Tu peux toujours négocier ou acheter avec les boutons des pépites.",
+  offers: "Le robot envoie lui-même une offre (avec ton message) sur chaque pépite qui passe tes règles.",
+  auto: "Le robot achète les pépites dont le prix est déjà rentable (ou fait une offre sinon), dans tes budgets." };
+function segSet(id, v) { $$(`#${id} button`).forEach(b => b.classList.toggle("on", b.dataset.v === v)); }
+async function loadRobot() {
+  RB = await api("/api/robot");
+  const s = RB.settings, ex = RB.executor || {};
+  segSet("rb-mode", s.robot_mode); segSet("rb-pay", s.robot_pay);
+  $("#rb-mode-help").textContent = MODE_HELP[s.robot_mode] || "";
+  const paused = (s.robot_pause_until || 0) * 1000 > Date.now();
+  $("#rb-resume").hidden = !paused;
+  if (document.activeElement.closest && !document.activeElement.closest("#robot-view .panel:nth-child(3)")) {
+    $("#rb-score").value = s.robot_min_score; $("#rb-profit").value = s.robot_min_profit; $("#rb-maxitem").value = s.robot_max_item;
+    $("#rb-conf").value = String(s.robot_min_conf); if (!$("#rb-conf").value) $("#rb-conf").value = "0.5";
+    $("#rb-budget").value = s.robot_day_budget; $("#rb-items").value = s.robot_day_items; $("#rb-offers").value = s.robot_day_offers;
+    if (document.activeElement !== $("#rb-brands")) $("#rb-brands").value = s.robot_brands || "";
+    $("#rb-ai").checked = !!s.robot_require_ai; if (document.activeElement !== $("#rb-tpl")) $("#rb-tpl").value = s.robot_offer_template;
+  }
+  const seen = ex.last_poll ? Date.now() / 1000 - ex.last_poll < 120 : false;
+  $("#rb-conn").innerHTML = !IN_APP && !seen ? `<span class="status-dot"></span>Le robot tourne dans l'<b>appli Android</b> : ouvre-la et connecte-toi à Vinted.`
+    : `<span class="status-dot ${ex.logged_in ? "on" : "off"}"></span>${ex.logged_in ? "Connecté à Vinted" : ex.logged_in === false ? "Pas connecté à Vinted" : "Connexion en cours de vérification…"}`
+      + (seen ? ` · robot actif` : ` · robot hors ligne`) + (paused ? ` · <b>en pause</b>` : "");
+  $("#rb-conn-btns").style.display = IN_APP ? "" : "none";
+  const t = RB.today;
+  $("#rb-today").innerHTML = `
+    <div class="kpi"><small>Dépensé aujourd'hui</small><b>${fmt(t.spent)}</b><span>sur ${fmt(+s.robot_day_budget)}</span></div>
+    <div class="kpi"><small>Achats</small><b>${t.buys}</b><span>sur ${s.robot_day_items}</span></div>
+    <div class="kpi"><small>Offres</small><b>${t.offers}</b><span>sur ${s.robot_day_offers}</span></div>`;
+  $("#rb-actions").innerHTML = RB.actions.length ? RB.actions.map(a => `<div class="act">
+      <img src="${esc(a.photo || "")}" alt="" referrerpolicy="no-referrer">
+      <div><div>${a.kind === "buy" ? "⚡ Achat" : a.kind === "offer" ? `💬 Offre ${fmt(a.amount)}` : "✉️ Message"} · ${esc(a.title || "")}</div>
+        <div class="meta">${fmt(a.price)} · ${a.origin === "robot" ? "robot" : "toi"} · ${ago(a.created_at)}${a.detail ? " · " + esc(a.detail) : ""}</div>
+        <div class="btns">
+          ${["pending", "running", "sent", "checkout"].includes(a.status) ? `<button class="ghost" onclick="rbCancel(${a.id})">Annuler</button>` : ""}
+          ${a.status === "checkout" && IN_APP ? `<button class="ghost" onclick="Android.runAction(JSON.stringify({id:${a.id},kind:'watch_paid',url:'${esc(a.checkout_url || a.url)}'}))">💳 Ouvrir le paiement</button>` : ""}
+          ${["checkout", "sent", "accepted"].includes(a.status) ? `<button class="ghost" onclick="rbPaid(${a.id})">✅ J'ai payé</button>` : ""}
+          ${a.url ? `<a class="ghost" href="${esc(a.url)}" target="_blank" rel="noopener" style="font-size:11px;padding:3px 7px">Annonce ↗</a>` : ""}
+          ${a.debug ? `<details><summary>Diagnostic</summary><pre style="white-space:pre-wrap;font-size:11px">${esc(a.debug)}</pre></details>` : ""}
+        </div></div>
+      <span class="stt ${a.status}">${ACT_LABEL[a.status] || a.status}</span></div>`).join("") : '<div class="meta">Aucune action pour l\'instant.</div>';
+  renderPortfolio(RB.portfolio);
+}
+function renderPortfolio(p) {
+  const st = p.stats;
+  $("#pf-stats").innerHTML = `
+    <div class="kpi"><small>Bénéfice réalisé</small><b class="${st.profit >= 0 ? "pos" : "neg"}">${fmt(st.profit)}</b><span>${st.sold} vendus${st.roi != null ? " · " + pct(st.roi) : ""}</span></div>
+    <div class="kpi"><small>En stock</small><b>${st.in_stock}</b><span>coût ${fmt(st.stock_cost)}${st.stock_value ? " · valeur ≈ " + fmt(st.stock_value) : ""}</span></div>
+    <div class="kpi"><small>Investi</small><b>${fmt(st.invested)}</b><span>${st.bought} achats</span></div>
+    <div class="kpi"><small>Délai de revente</small><b>${st.avg_days != null ? days(st.avg_days) : "–"}</b><span>en moyenne</span></div>`;
+  const opts = [["achete", "Acheté"], ["recu", "Reçu"], ["en_vente", "En vente"], ["vendu", "Vendu"], ["retourne", "Retourné"]];
+  $("#pf-items").innerHTML = p.items.map(i => `<div class="pf">
+      ${i.photo ? `<img src="${esc(i.photo)}" alt="" referrerpolicy="no-referrer">` : `<div style="width:48px;height:48px;border-radius:6px;background:var(--panel2);display:grid;place-items:center">👕</div>`}
+      <div><div>${esc(i.title || "")}</div><div class="meta">payé ${fmt(i.buy_price)} · coût ${fmt(i.buy_cost)}${i.est_value ? " · valeur ≈ " + fmt(Math.round(i.est_value)) : ""}
+        ${i.status === "vendu" && i.sale_price != null ? ` · <b class="${i.sale_price - (i.sale_fees || 0) - i.buy_cost >= 0 ? "pos" : "neg"}">${fmt(Math.round((i.sale_price - (i.sale_fees || 0) - i.buy_cost) * 100) / 100)}</b>` : ""}</div></div>
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+        <select onchange="pfUpdate(${i.id}, {status: this.value})">${opts.map(([v, t]) => `<option value="${v}" ${i.status === v ? "selected" : ""}>${t}</option>`).join("")}</select>
+        <input type="number" placeholder="Vendu €" value="${i.sale_price ?? ""}" style="width:80px" onchange="pfUpdate(${i.id}, {sale_price: this.value, status: 'vendu'})">
+        <button class="ghost danger" onclick="pfDelete(${i.id})">✕</button></div></div>`).join("") || '<div class="meta">Tes achats apparaîtront ici (automatiquement quand le robot achète).</div>';
+}
+async function rbSave(extra = {}) {
+  const body = Object.assign({ robot_min_score: $("#rb-score").value, robot_min_profit: $("#rb-profit").value,
+    robot_max_item: $("#rb-maxitem").value, robot_min_conf: $("#rb-conf").value, robot_day_budget: $("#rb-budget").value,
+    robot_day_items: $("#rb-items").value, robot_day_offers: $("#rb-offers").value, robot_brands: $("#rb-brands").value,
+    robot_require_ai: $("#rb-ai").checked, robot_offer_template: $("#rb-tpl").value }, extra);
+  await api("/api/settings", { method: "POST", body: JSON.stringify(body) });
+  await loadRobot();
+}
+$$("#rb-mode button").forEach(b => b.onclick = async () => {
+  if (b.dataset.v !== "off" && !confirm("Activer le robot ? Il agira sur ton compte Vinted dans les limites de tes règles et budgets. Vinted peut suspendre les comptes qui utilisent des robots.")) return;
+  await rbSave({ robot_mode: b.dataset.v });
+});
+$$("#rb-pay button").forEach(b => b.onclick = async () => {
+  if (b.dataset.v === "auto" && !confirm("Paiement automatique : le robot paiera SANS te demander, dans la limite de tes budgets. Continuer ?")) return;
+  await rbSave({ robot_pay: b.dataset.v });
+});
+$("#rb-save").onclick = async () => { await rbSave(); const m = $("#rb-msg"); m.textContent = "Règles enregistrées."; m.className = "msg ok"; };
+$("#rb-pause1").onclick = () => rbSave({ robot_pause_until: Date.now() / 1000 + 3600 });
+$("#rb-pause24").onclick = () => rbSave({ robot_pause_until: Date.now() / 1000 + 86400 });
+$("#rb-resume").onclick = () => rbSave({ robot_pause_until: 0 });
+$("#rb-login").onclick = () => window.Android && Android.openVinted("https://www.vinted.fr/");
+async function rbCancel(id) { await api(`/api/robot/actions/${id}/cancel`, { method: "POST", body: "{}" }); loadRobot(); }
+async function rbPaid(id) { await api(`/api/robot/actions/${id}/paid`, { method: "POST", body: "{}" }); loadRobot(); }
+async function pfUpdate(id, d) { await api(`/api/portfolio/${id}`, { method: "PATCH", body: JSON.stringify(d) }); loadRobot(); }
+async function pfDelete(id) { if (confirm("Supprimer cet article du stock ?")) { await api(`/api/portfolio/${id}`, { method: "DELETE" }); loadRobot(); } }
+$("#pf-add").onclick = async () => {
+  await api("/api/portfolio", { method: "POST", body: JSON.stringify({ title: $("#pf-title").value, buy_price: $("#pf-price").value, buy_cost: $("#pf-cost").value || $("#pf-price").value }) });
+  $("#pf-title").value = $("#pf-price").value = $("#pf-cost").value = ""; loadRobot();
+};
+setInterval(() => { if (currentTab === "robot" && !document.hidden) loadRobot(); }, 8000);
+
 
 
 (async () => {

@@ -96,6 +96,33 @@ revente populaires » en propose une vingtaine.
 
 Données mobiles : le suivi des ventes fait par défaut 60 vérifications par heure (réglable).
 
+## 🤖 Robot (appli Android)
+
+Le robot agit sur **ton compte Vinted** via un navigateur intégré à l'appli : tu t'y connectes
+toi-même (onglet Robot → « Connexion Vinted »), ton mot de passe reste sur ton téléphone.
+
+- **Négocier** : sur chaque pépite, offre conseillée (la plus basse ayant de bonnes chances d'être
+  acceptée selon l'ancienneté de l'annonce, les favoris et les baisses de prix, sans dépasser le prix
+  qui garde ton bénéfice) + message au vendeur. Le robot remplit et envoie l'offre.
+- **Acheter** : le robot ouvre l'annonce, clique sur « Acheter » et s'arrête sur la page de paiement :
+  une notification te permet de vérifier et valider (ou paiement automatique si tu l'autorises).
+- **Modes** : Arrêt / Offres auto / Achat auto, avec règles (score, bénéfice, confiance, marques,
+  authenticité Gemini) et budgets (€ par article, € par jour, achats et offres par jour), pause 1 h / 24 h.
+- **Journal** : chaque action, son résultat et, en cas d'échec, un diagnostic (boutons visibles sur
+  la page) pour adapter le robot si Vinted change son site.
+- **Stock & bénéfices** : achats ajoutés automatiquement, statut (reçu, en vente, vendu), prix de
+  revente, bénéfice réel, rentabilité et délai de revente.
+
+⚠️ Les conditions de Vinted interdisent les robots depuis le 8 octobre 2026 : risque de suspension
+du compte. Utilise de préférence un compte dédié aux achats et des budgets raisonnables.
+
+## Marques
+
+Liste déroulante de toutes les marques connues (≈ 640 intégrées + toutes celles vues dans les
+annonces + celles que tu ajoutes). Les fautes sont corrigées (« ralf loren » → Ralph Lauren,
+« tnf » → The North Face) ; une marque inconnue est vérifiée sur Vinted (orthographe des annonces
+trouvées) puis ajoutée à la liste.
+
 ## Catégories
 
 Vêtements, Chaussures & sneakers, Sacs & maroquinerie, Accessoires, Montres & bijoux.

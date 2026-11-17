@@ -245,7 +245,8 @@ class Robot:
             a = r[0]
             self._exec("UPDATE actions SET status = 'running', updated_at = ? WHERE id = ?", (time.time(), a["id"]))
             a["status"] = "running"
-            a["pay"] = self.settings().get("robot_pay") == "auto" and a["kind"] == "buy"
+            # paiement auto seulement pour les achats décidés par le robot (pas ceux que tu lances toi-même)
+            a["pay"] = self.settings().get("robot_pay") == "auto" and a["kind"] == "buy" and a["origin"] == "robot"
             return a
 
     def report(self, aid: int, status: str, detail: str = "", debug=None, checkout_url: str | None = None) -> dict | None:

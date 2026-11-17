@@ -431,7 +431,7 @@
           <div class="row" style="margin-top:8px" id="rb-conn-btns">
             <button type="button" id="rb-login">🔑 Connexion Vinted</button>
           </div>
-          <p class="hint">Tu te connectes toi-même dans le navigateur intégré à l'appli : ton mot de passe reste sur ton téléphone. Conseil : utilise un compte dédié aux achats.</p>
+          <p class="hint">Tu te connectes toi-même, une seule fois : dans le navigateur intégré sur le téléphone, ou dans la fenêtre Chrome du robot sur PC (la connexion reste mémorisée). Ton mot de passe ne quitte pas ton appareil. Conseil : utilise un compte dédié aux achats.</p>
         </div>
         <div class="panel">
           <h2>Mode du robot</h2>
@@ -1108,6 +1108,12 @@ brandAC($("#w-brands"), $("#w-brands-msg"));
 brandAC($("#rb-brands"), $("#rb-brands-msg"));
 
 // ---------- négocier / acheter ----------
+const CAN_ROBOT = () => IN_APP || !!(META && META.pc_robot);
+function openPage(url) {
+  if (IN_APP && window.Android) Android.runAction(JSON.stringify({ kind: "watch_paid", url }));
+  else if (META.pc_robot) api("/api/robot/open", { method: "POST", body: JSON.stringify({ url }) });
+  else window.open(url, "_blank");
+}
 async function openOffer(id, kind) {
   const [o, d] = await Promise.all([api(`/api/listings/${id}/offer`), api(`/api/listings/${id}`)]);
   const l = d.listing;
@@ -1132,11 +1138,12 @@ async function openOffer(id, kind) {
       <label class="f">Montant de l'offre (€)</label><input type="number" id="of-amount" step="0.5" value="${o.offer}">
       <label class="f">Message au vendeur</label><textarea id="of-msg">${esc(o.message)}</textarea>` : ""}
     <div class="card-actions" style="margin-top:12px">
-      ${IN_APP ? `<button type="button" onclick="sendAction(${id}, '${kind}')">${kind === "buy" ? "⚡ Lancer l'achat (tu valides le paiement)" : "💬 Envoyer l'offre avec le robot"}</button>` : ""}
+      ${CAN_ROBOT() ? `<button type="button" onclick="sendAction(${id}, '${kind}')">${kind === "buy" ? "⚡ Lancer l'achat (tu valides le paiement)" : "💬 Envoyer l'offre avec le robot"}</button>` : ""}
       ${kind === "offer" ? `<button type="button" class="ghost" onclick="copyAndOpen('${esc(l.url)}')">📋 Copier le message et ouvrir Vinted</button>`
         : `<a class="ghost" href="${esc(l.url)}" target="_blank" rel="noopener" style="padding:6px 10px">Ouvrir sur Vinted ↗</a>`}
     </div>
-    ${!IN_APP ? `<p class="hint">Sur PC, le robot ne clique pas à ta place : c'est l'appli Android qui exécute les offres et les achats.</p>` : ""}`;
+    ${!CAN_ROBOT() ? `<p class="hint">Pour que le robot clique à ta place sur PC : « pip install playwright » puis « playwright install chromium », et relance l'appli.</p>`
+      : !IN_APP ? `<p class="hint">Le robot agit dans sa fenêtre Chrome (onglet Robot → Connexion Vinted pour t'y connecter la première fois).</p>` : ""}`;
   $("#offer-dlg").showModal();
 }
 function copyAndOpen(url) {
@@ -1149,7 +1156,8 @@ async function sendAction(id, kind) {
   if (kind === "offer") { body.amount = $("#of-amount").value; body.message = $("#of-msg").value; }
   const a = await api(`/api/listings/${id}/action`, { method: "POST", body: JSON.stringify(body) });
   $("#offer-dlg").close();
-  if (window.Android) Android.runAction(JSON.stringify(Object.assign({}, a, { pay: false })));
+  if (IN_APP && window.Android) Android.runAction(JSON.stringify(Object.assign({}, a, { pay: false })));
+  else { showTab("robot"); }  // sur PC, l'exécuteur prend l'action dans la fenêtre Chrome du robot
 }
 
 // ---------- onglet robot ----------
@@ -1175,10 +1183,13 @@ async function loadRobot() {
     $("#rb-ai").checked = !!s.robot_require_ai; if (document.activeElement !== $("#rb-tpl")) $("#rb-tpl").value = s.robot_offer_template;
   }
   const seen = ex.last_poll ? Date.now() / 1000 - ex.last_poll < 120 : false;
-  $("#rb-conn").innerHTML = !IN_APP && !seen ? `<span class="status-dot"></span>Le robot tourne dans l'<b>appli Android</b> : ouvre-la et connecte-toi à Vinted.`
+  const pc = ex.pc || {};
+  $("#rb-conn").innerHTML = !IN_APP && !pc.available ? `<span class="status-dot"></span>Robot PC non installé : <code>pip install playwright</code> puis <code>playwright install chromium</code>, et relance l'appli. (Le robot marche aussi dans l'appli Android.)`
+    : !IN_APP && pc.error ? `<span class="status-dot off"></span>${esc(pc.error)}`
+    : !IN_APP && !seen ? `<span class="status-dot"></span>Robot PC en démarrage…`
     : `<span class="status-dot ${ex.logged_in ? "on" : "off"}"></span>${ex.logged_in ? "Connecté à Vinted" : ex.logged_in === false ? "Pas connecté à Vinted" : "Connexion en cours de vérification…"}`
       + (seen ? ` · robot actif` : ` · robot hors ligne`) + (paused ? ` · <b>en pause</b>` : "");
-  $("#rb-conn-btns").style.display = IN_APP ? "" : "none";
+  $("#rb-conn-btns").style.display = IN_APP || pc.available ? "" : "none";
   const t = RB.today;
   $("#rb-today").innerHTML = `
     <div class="kpi"><small>Dépensé aujourd'hui</small><b>${fmt(t.spent)}</b><span>sur ${fmt(+s.robot_day_budget)}</span></div>
@@ -1190,7 +1201,7 @@ async function loadRobot() {
         <div class="meta">${fmt(a.price)} · ${a.origin === "robot" ? "robot" : "toi"} · ${ago(a.created_at)}${a.detail ? " · " + esc(a.detail) : ""}</div>
         <div class="btns">
           ${["pending", "running", "sent", "checkout"].includes(a.status) ? `<button class="ghost" onclick="rbCancel(${a.id})">Annuler</button>` : ""}
-          ${a.status === "checkout" && IN_APP ? `<button class="ghost" onclick="Android.runAction(JSON.stringify({id:${a.id},kind:'watch_paid',url:'${esc(a.checkout_url || a.url)}'}))">💳 Ouvrir le paiement</button>` : ""}
+          ${a.status === "checkout" && CAN_ROBOT() ? `<button class="ghost" onclick="openPage('${esc(a.checkout_url || a.url)}')">💳 Ouvrir le paiement</button>` : ""}
           ${["checkout", "sent", "accepted"].includes(a.status) ? `<button class="ghost" onclick="rbPaid(${a.id})">✅ J'ai payé</button>` : ""}
           ${a.url ? `<a class="ghost" href="${esc(a.url)}" target="_blank" rel="noopener" style="font-size:11px;padding:3px 7px">Annonce ↗</a>` : ""}
           ${a.debug ? `<details><summary>Diagnostic</summary><pre style="white-space:pre-wrap;font-size:11px">${esc(a.debug)}</pre></details>` : ""}
@@ -1235,7 +1246,10 @@ $("#rb-save").onclick = async () => { await rbSave(); const m = $("#rb-msg"); m.
 $("#rb-pause1").onclick = () => rbSave({ robot_pause_until: Date.now() / 1000 + 3600 });
 $("#rb-pause24").onclick = () => rbSave({ robot_pause_until: Date.now() / 1000 + 86400 });
 $("#rb-resume").onclick = () => rbSave({ robot_pause_until: 0 });
-$("#rb-login").onclick = () => window.Android && Android.openVinted("https://www.vinted.fr/");
+$("#rb-login").onclick = async () => {
+  if (IN_APP && window.Android) return Android.openVinted("https://www.vinted.fr/");
+  try { const r = await api("/api/robot/login", { method: "POST", body: "{}" }); alert(r.message); } catch (e) { alert(e.message); }
+};
 async function rbCancel(id) { await api(`/api/robot/actions/${id}/cancel`, { method: "POST", body: "{}" }); loadRobot(); }
 async function rbPaid(id) { await api(`/api/robot/actions/${id}/paid`, { method: "POST", body: "{}" }); loadRobot(); }
 async function pfUpdate(id, d) { await api(`/api/portfolio/${id}`, { method: "PATCH", body: JSON.stringify(d) }); loadRobot(); }

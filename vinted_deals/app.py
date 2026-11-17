@@ -6,6 +6,7 @@ Options   :  python app.py --interval 90 --domain www.vinted.be --port 8000
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import threading
@@ -113,7 +114,7 @@ def meta():
                    statuses=[{"id": k, "label": v} for k, v in STATUS_LABELS.items()],
                    default_interval=monitor.default_interval, cffi=has_cffi(), default_model=DEFAULT_MODEL,
                    types=[{"key": k, "label": v["label"]} for k, v in ITEM_TYPES.items()],
-                   flags=FLAG_LABELS, popular_terms=POPULAR_TERMS)
+                   flags=FLAG_LABELS, popular_terms=POPULAR_TERMS, pc_robot=_pc_robot_ok())
 
 
 @app.get("/api/watches")
@@ -282,6 +283,32 @@ def brands_view():
     return jsonify(top)
 
 
+# ---------- robot sur PC (fenêtre Chrome pilotée) ----------
+pc_exec = None
+
+
+def _pc_robot_ok() -> bool:
+    return bool(pc_exec is not None and pc_exec.status.get("available"))
+
+
+@app.post("/api/robot/login")
+def robot_login():
+    if pc_exec is None or not pc_exec.status.get("available"):
+        from pc_robot import INSTALL_HELP
+        return jsonify(ok=False, message=INSTALL_HELP), 400
+    pc_exec.open_login()
+    return jsonify(ok=True, message="Une fenêtre Chrome s'ouvre : connecte-toi à Vinted, puis laisse-la ouverte.")
+
+
+@app.post("/api/robot/open")
+def robot_open():
+    url = (request.get_json(force=True) or {}).get("url") or ""
+    if pc_exec is None or not pc_exec.status.get("available") or not url.startswith("https://"):
+        return jsonify(ok=False), 400
+    pc_exec.open_url(url)
+    return jsonify(ok=True)
+
+
 # ---------- catalogue de marques ----------
 _verify_src = None
 _verify_pool = ThreadPoolExecutor(max_workers=2)
@@ -448,6 +475,10 @@ def main():
     db = DB(args.db)
     monitor = Monitor(db, interval=args.interval, domain=args.domain)
     monitor.start()
+    global pc_exec
+    from pc_robot import PCExecutor
+    pc_exec = PCExecutor(monitor.robot, str(Path(args.db).resolve().parent / "vinted-robot-profile"))
+    pc_exec.start()
 
     url = f"http://127.0.0.1:{args.port}"
     print(f"\n  Deals Mode tourne sur {url}  (Ctrl+C pour arrêter)")

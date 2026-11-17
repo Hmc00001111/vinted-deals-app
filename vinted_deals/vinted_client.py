@@ -258,12 +258,15 @@ class VintedClient:
 
     # ---------- recherche ----------
     def search(self, text: str = "", page: int = 1, per_page: int = 96,
-               price_from: float | None = None, order: str = "newest_first") -> list[Item]:
+               price_from: float | None = None, order: str = "newest_first",
+               price_to: float | None = None) -> list[Item]:
         params: dict[str, Any] = {"page": page, "per_page": per_page, "order": order}
         if text:
             params["search_text"] = text
         if price_from:
             params["price_from"] = price_from
+        if price_to:
+            params["price_to"] = price_to
 
         last_error = ""
         for attempt in range(5):
@@ -323,3 +326,186 @@ class VintedClient:
             return out
 
         raise VintedError(f"Vinted ne répond pas ({last_error})")
+
+    # ---------- état d'une annonce (vendue ? toujours en ligne ?) ----------
+    # Routes JSON candidates pour le détail d'une annonce. La bonne est découverte une fois
+    # (avec une annonce qu'on sait en ligne) puis mémorisée ; à défaut on lit la page HTML.
+    ITEM_ROUTES = [
+        "{api}/svc-catalogue/items/{id}",
+        "{base}/api/v2/items/{id}/details",
+        "{base}/api/v2/items/{id}",
+        "{api}/svc-items/items/{id}",
+    ]
+    HTML_LIMIT = 700_000  # on n'a pas besoin de toute la page (économie de données sur téléphone)
+
+    item_route: str | None = None   # route JSON validée, ou "html"
+
+    def _get(self, url: str, **kw):
+        if self.session is None:
+            self._new_session()
+        self._throttle()
+        return self.session.get(url, timeout=20, **kw)
+
+    def discover_item_route(self, known_active_id: int | str) -> str:
+        """Trouve une route de détail qui marche, en testant sur une annonce en ligne."""
+        for tpl in self.ITEM_ROUTES:
+            url = tpl.format(api=self.api, base=self.base, id=known_active_id)
+            try:
+                r = self._get(url, headers=self._api_headers())
+            except requests.RequestException:
+                continue
+            if r.status_code == 200 and str(known_active_id) in r.text[:200_000]:
+                try:
+                    r.json()
+                except ValueError:
+                    continue
+                self.item_route = tpl
+                log.info("Détail d'annonce Vinted : %s", tpl)
+                return tpl
+            if r.status_code in (401, 403, 429):
+                continue
+        # pas de route JSON : on suit l'annonce par sa présence dans la recherche (léger, marche partout),
+        # avec confirmation par la page de l'annonce quand curl_cffi est installé (PC)
+        self.item_route = "search"
+        log.info("Suivi des annonces Vinted : présence dans la recherche%s",
+                 " + page de l'annonce" if _has_cffi() else "")
+        return "search"
+
+    def item_state(self, item_id: int | str, title: str = "", price: float | None = None) -> dict | None:
+        """{'state': 'active'|'reserved'|'sold'|'removed'|'missing', 'price': float|None, 'favourites': int|None}
+        ou None si on ne sait pas dire (page illisible). Lève VintedError en cas de blocage.
+        'missing' : l'annonce n'apparaît plus dans la recherche (vendue ou retirée, à confirmer)."""
+        route = self.item_route or "search"
+        if route == "search":
+            st = self._search_state(item_id, title, price)
+            if st and st["state"] == "missing" and _has_cffi():
+                try:  # confirmation définitive (vendue / supprimée / toujours là) par la page
+                    page = self._html_state(item_id)
+                    if page and page["state"] != "unknown":
+                        return page
+                except (VintedError, requests.RequestException, Exception):
+                    pass
+            return st
+        if route != "html":
+            url = route.format(api=self.api, base=self.base, id=item_id)
+            r = self._get(url, headers=self._api_headers())
+            if r.status_code in (401, 403, 429):
+                self.session = None
+                raise VintedError(f"HTTP {r.status_code} (détail annonce)")
+            if r.status_code in (404, 410):
+                return {"state": "removed", "price": None, "favourites": None}
+            if r.status_code == 200:
+                return parse_item_state(r.text)
+            return None
+        return self._html_state(item_id)
+
+    def _search_state(self, item_id: int | str, title: str, price: float | None) -> dict | None:
+        """Cherche l'annonce par son titre (et son prix) : présente = en vente, absente = disparue."""
+        if not title:
+            return None
+        words = title.split()
+        pf = {"price_from": max(0.5, round(price - 0.5, 2)), "price_to": round(price + 0.5, 2)} if price else {}
+        attempts = [(" ".join(words[:8]), pf, "relevance"), (" ".join(words[:8]), {}, "relevance"),
+                    (" ".join(words[:3]), pf, "newest_first")]
+        answered = 0
+        for text, kw, order in attempts:
+            items = self.search(text, page=1, per_page=96, order=order, **kw)
+            for it in items:
+                if str(it.id) == str(item_id):
+                    return {"state": "active", "price": it.price, "favourites": it.favourites}
+            if items:
+                answered += 1
+        # introuvable alors que la recherche répond : vendue ou retirée (à confirmer par un 2e passage)
+        return {"state": "missing", "price": None, "favourites": None} if answered >= 2 else None
+
+    def _html_state(self, item_id: int | str) -> dict | None:
+        if _has_cffi():  # empreinte de vrai navigateur : la page passe la protection anti-robot
+            from sources.base import HTML_HEADERS, make_session
+            if getattr(self, "_page_session", None) is None:
+                self._page_session = make_session(impersonate=True)
+            self._throttle()
+            r = self._page_session.get(f"{self.base}/items/{item_id}", headers=HTML_HEADERS, timeout=30)
+            if r.status_code in (404, 410) or (r.status_code == 200 and f"/items/{item_id}" not in str(r.url)):
+                return {"state": "removed", "price": None, "favourites": None}
+            if r.status_code != 200:
+                self._page_session = None
+                raise VintedError(f"HTTP {r.status_code} (page annonce)")
+            return parse_item_state(r.text)
+        # page HTML de l'annonce (lecture partielle)
+        page_headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Accept-Language": f"{self.locale},en;q=0.5"}
+        r = self._get(f"{self.base}/items/{item_id}", headers=page_headers, stream=True, allow_redirects=True)
+        try:
+            if r.status_code in (403, 429):
+                self.session = None
+                if self.item_route == "html":
+                    self.item_route = None  # la page est bloquée : on redécouvre une méthode
+                raise VintedError(f"HTTP {r.status_code} (page annonce)")
+            if r.status_code in (404, 410):
+                return {"state": "removed", "price": None, "favourites": None}
+            if f"/items/{item_id}" not in r.url:  # redirigé vers le catalogue : annonce supprimée
+                return {"state": "removed", "price": None, "favourites": None}
+            chunks, size = [], 0
+            for chunk in r.iter_content(65536, decode_unicode=False):
+                chunks.append(chunk)
+                size += len(chunk)
+                text = b"".join(chunks).decode("utf-8", "ignore")
+                st = parse_item_state(text, partial=True)
+                if st and st["state"] != "unknown" and st.get("price") is not None:
+                    return st
+                if size > self.HTML_LIMIT:
+                    break
+            st = parse_item_state(b"".join(chunks).decode("utf-8", "ignore"))
+            return st if st and st["state"] != "unknown" else None
+        finally:
+            r.close()
+
+
+import re as _re
+
+
+def _has_cffi() -> bool:
+    try:
+        import curl_cffi  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+_B = r'\\?"'  # guillemet éventuellement échappé (données Next.js / RSC)
+
+
+def _flag(text: str, key: str) -> bool | None:
+    m = _re.search(_B + key + _B + r"\s*:\s*(true|false)", text)
+    return None if not m else m.group(1) == "true"
+
+
+def parse_item_state(text: str, partial: bool = False) -> dict | None:
+    """Repère l'état d'une annonce dans un JSON d'API ou une page HTML Vinted."""
+    if not text:
+        return None
+    t = text
+    state = "unknown"
+    closing = _re.search(_B + r"item_closing_action" + _B + r"\s*:\s*" + _B + r"(\w+)", t)
+    is_closed, is_reserved = _flag(t, "is_closed"), _flag(t, "is_reserved")
+    is_hidden = _flag(t, "is_hidden")
+    avail = _re.search(r"schema\.org/(InStock|SoldOut|OutOfStock|Discontinued|LimitedAvailability)", t)
+    if (closing and closing.group(1).lower() == "sold") or (avail and avail.group(1) == "SoldOut"):
+        state = "sold"
+    elif is_closed:
+        state = "sold" if not is_hidden else "removed"
+    elif avail and avail.group(1) in ("OutOfStock", "Discontinued"):
+        state = "sold"
+    elif is_reserved:
+        state = "reserved"
+    elif is_closed is False or (avail and avail.group(1) in ("InStock", "LimitedAvailability")):
+        state = "active"
+    price = None
+    m = _re.search(_B + r"price" + _B + r"\s*:\s*\{[^{}]*?" + _B + r"amount" + _B + r"\s*:\s*" + _B +
+                   r"?([0-9]+(?:\.[0-9]+)?)", t) or \
+        _re.search(r'"price"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?\s*,\s*"priceCurrency"', t)
+    if m:
+        price = float(m.group(1))
+    fav = _re.search(_B + r"favourite_count" + _B + r"\s*:\s*(\d+)", t)
+    if state == "unknown" and partial:
+        return {"state": "unknown", "price": price, "favourites": int(fav.group(1)) if fav else None}
+    return {"state": state, "price": price, "favourites": int(fav.group(1)) if fav else None}

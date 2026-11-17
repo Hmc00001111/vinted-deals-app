@@ -89,19 +89,97 @@
   .tabs { display: none; }
   .only-mobile { display: none; }
 
+
+  /* ---------- vues Analyste / Pépites ---------- */
+  .views { display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
+  .views button { background: none; color: var(--muted); padding: 6px 12px; font-size: 13px; border-radius: 7px; }
+  .views button.on { background: var(--panel2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+  .view { display: none; }
+  main.tab-analyst, main.tab-gems { grid-template-columns: 1fr; }
+  main.tab-analyst > aside, main.tab-gems > aside, main.tab-analyst #feed-view, main.tab-gems #feed-view { display: none; }
+  main.tab-analyst #analyst-view, main.tab-gems #gems-view { display: block; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { background: var(--panel); color: var(--muted); border-radius: 0; padding: 7px 12px; font-weight: 600; font-size: 13px; }
+  .seg button.on { background: #0c2a2c; color: var(--accent); }
+  .toolbar input[type=number] { width: 130px; padding: 7px; background: var(--panel); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .kpi small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; display: block; }
+  .kpi b { font-size: 20px; display: block; margin-top: 2px; } .kpi span { color: var(--muted); font-size: 12px; }
+  .note { color: var(--muted); font-size: 12px; margin: 0 0 12px; padding: 8px 10px; border-left: 3px solid var(--warn); background: var(--panel); border-radius: 0 8px 8px 0; }
+  .note.info { border-left-color: var(--accent); }
+  .an-layout { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+  .group { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; display: grid; grid-template-columns: 112px 1fr; gap: 12px; }
+  .mosaic { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; border-radius: 8px; overflow: hidden; align-self: start; }
+  .mosaic img { width: 100%; aspect-ratio: 3/4; object-fit: cover; background: #222; display: block; }
+  .group h3 { margin: 0 0 6px; font-size: 15px; display: flex; gap: 8px; align-items: baseline; }
+  .group h3 .rank { color: var(--accent); font-size: 13px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; padding: 3px 8px; border-radius: 6px; background: var(--panel2); border: 1px solid var(--line); }
+  .chip b { color: var(--text); } .chip.good { color: var(--good); border-color: #1f4d33; } .chip.bad { color: var(--bad); border-color: #5c2a2a; }
+  .group .more { margin-top: 8px; }
+  .similar { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .mini { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; font-size: 12px; color: inherit; text-decoration: none; display: block; }
+  .mini img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #222; display: block; }
+  .mini div { padding: 6px 8px; } .mini .p { font-weight: 700; font-size: 14px; }
+  .mini .t { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); }
+  .mini .m { color: var(--good); font-weight: 600; } .mini .m.neg { color: var(--bad); }
+  .side .panel h2 { margin-bottom: 8px; }
+  .rank-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  .rank-list li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .rank-list li:last-child { border: 0; } .rank-list li span { color: var(--muted); }
+  .gem-score { position: absolute; top: 8px; right: 8px; font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: rgba(0,0,0,.75); color: var(--violet); }
+  .gem-score.hot { color: #ffd166; }
+  .money { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 12px; margin: 4px 0; }
+  .money b { font-size: 14px; } .pos { color: var(--good); } .neg { color: var(--bad); }
+  .conf { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 2px; }
+  .conf i { display: block; height: 100%; background: var(--accent); }
+  .flags { font-size: 11px; color: var(--warn); margin: 2px 0 0; padding-left: 14px; }
+  .val-line { font-size: 12px; color: var(--muted); }
+  .val-line b { color: var(--text); }
+  .card-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .card-actions button, .card-actions a { font-size: 12px; padding: 4px 8px; }
+  a.ghost { border: 1px solid var(--line); border-radius: 8px; color: var(--text); text-decoration: none; }
+  .ai .src { font-size: 11px; margin-top: 4px; } .ai .src a { color: var(--accent); margin-right: 6px; }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(760px, 96vw); max-height: 90vh; }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  .dlg-head { position: sticky; top: 0; background: var(--panel); padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .dlg-body { padding: 14px 16px; overflow: auto; }
+  .dlg-top { display: grid; grid-template-columns: 130px 1fr; gap: 14px; }
+  .dlg-top img { width: 100%; border-radius: 8px; aspect-ratio: 3/4; object-fit: cover; }
+  table.calc { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  table.calc td { padding: 3px 0; border-bottom: 1px dashed var(--line); } table.calc td:last-child { text-align: right; }
+  .comp { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .comp img { width: 52px; height: 52px; object-fit: cover; border-radius: 6px; background: #222; }
+  .comp .st { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 5px; }
+  .st.sold { background: #123522; color: var(--good); } .st.active { background: var(--panel2); color: var(--muted); }
+  textarea { width: 100%; min-height: 64px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
+
   /* ---------- téléphone ---------- */
   @media (max-width: 900px) {
     header { padding: 10px 12px; }
     header .spacer { display: none; }
     main { grid-template-columns: 1fr; padding: 12px 12px 84px; gap: 12px; }
     main.tab-feed > aside, main.tab-watches > section, main.tab-settings > section { display: none; }
-    main.tab-watches #settings-panel, main.tab-settings #form-panel, main.tab-settings #watches-panel { display: none; }
+    main.tab-watches #settings-panel, main.tab-watches #market-panel, main.tab-settings #form-panel, main.tab-settings #watches-panel { display: none; }
+    .views { display: none; }
+    .an-layout { grid-template-columns: 1fr; }
+    .group { grid-template-columns: 84px 1fr; padding: 10px; }
+    .similar { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+    .dlg-top { grid-template-columns: 96px 1fr; }
     .grid { grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px; }
     .price { font-size: 17px; }
     .sites { grid-template-columns: 1fr; }
     input[type=text], input[type=number], input[type=password], select { font-size: 16px; }
     .tabs { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--panel); border-top: 1px solid var(--line); }
     .tabs button { flex: 1; background: none; color: var(--muted); border-radius: 0; padding: 14px 4px; font-weight: 600; font-size: 13px; }
+    #analyst-view .toolbar, #gems-view .toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    #analyst-view .toolbar .seg { grid-column: 1 / -1; } .seg button { flex: 1; }
+    .toolbar input[type=number], .toolbar select { width: 100%; }
+    #gems { grid-template-columns: 1fr; }
+    #gems .card img { aspect-ratio: 4/3; }
+    .kpis { grid-template-columns: 1fr 1fr; } .kpi b { font-size: 16px; }
+    .tabs button { font-size: 11px; padding: 10px 2px; line-height: 1.3; }
     .tabs button.on { color: var(--accent); box-shadow: inset 0 2px 0 var(--accent); }
     .only-mobile { display: inline; }
   }
@@ -116,6 +194,11 @@
     <span class="pill" id="st-ai">Gemini : …</span>
     <span class="pill err" id="st-err" hidden></span>
     <span class="spacer"></span>
+    <div class="views">
+      <button type="button" data-tab="feed" class="on">🔥 Annonces</button>
+      <button type="button" data-tab="analyst">📊 Analyste</button>
+      <button type="button" data-tab="gems">💎 Pépites</button>
+    </div>
     <button class="ghost" id="notif-btn">🔔 Notifications</button>
     <button class="ghost" id="scan-btn">↻ Scanner</button>
   </div>
@@ -208,9 +291,45 @@
         <div style="margin-top:10px"><button type="button" class="ghost" id="s-save2">Enregistrer les options</button></div>
       </details>
     </div>
+    <div class="panel" id="market-panel">
+      <h2>Réglages · Veille marché & pépites</h2>
+      <p class="hint" style="margin-top:0">L'analyste et les pépites se nourrissent de toutes les annonces vues (tes surveillances + cette veille). Plus il y a de données, plus la valeur estimée est précise.</p>
+      <label class="f">Marques / mots-clés surveillés en continu (séparés par des virgules)</label>
+      <textarea id="m-terms" placeholder="ex. Carhartt, Ralph Lauren cachemire, Arc'teryx"></textarea>
+      <div class="row" style="margin-top:6px"><button type="button" class="ghost" id="m-popular">✨ Marques de revente populaires</button></div>
+      <div class="row">
+        <div><label class="f">Fréquence de la veille</label>
+          <select id="m-interval"><option value="300">5 min</option><option value="600">10 min</option><option value="1200">20 min</option><option value="1800">30 min</option><option value="3600">1 h</option></select></div>
+        <div><label class="f">Vérifications de ventes / h</label><input type="number" id="m-perhour" min="10" max="1200"></div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="m-tracker"> Suivre les ventes (re-vérifie les annonces Vinted pour savoir ce qui se vend et en combien de temps)</label>
+      <div class="row">
+        <div><label class="f">Alerte pépite si score ≥ (0 = jamais)</label><input type="number" id="m-notify" min="0" max="100"></div>
+        <div><label class="f">Identification Gemini auto si score ≥</label><input type="number" id="m-aiscore" min="0" max="100"></div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="m-autoai"> Identifier automatiquement les meilleures pépites (Gemini + recherche Google, dans la limite du quota)</label>
+      <details>
+        <summary>Frais et revente (calcul du bénéfice)</summary>
+        <div class="row">
+          <div><label class="f">Protection acheteur fixe (€)</label><input type="number" id="m-fee-fixed" step="0.05" min="0"></div>
+          <div><label class="f">Protection acheteur (%)</label><input type="number" id="m-fee-pct" step="0.5" min="0"></div>
+        </div>
+        <div class="row">
+          <div><label class="f">Port pour recevoir (€)</label><input type="number" id="m-ship" step="0.5" min="0"></div>
+          <div><label class="f">Frais vendeur (%)</label><input type="number" id="m-sellfee" step="0.5" min="0"></div>
+        </div>
+        <div class="row">
+          <div><label class="f">Je revends à (% de la valeur)</label><input type="number" id="m-resale" step="1" min="30" max="150"></div>
+          <div><label class="f">Bénéfice minimum (€)</label><input type="number" id="m-minprofit" step="1" min="0"></div>
+        </div>
+      </details>
+      <div class="row" style="margin-top:12px"><button type="button" id="m-save">Enregistrer</button></div>
+      <div class="msg" id="m-msg"></div>
+      <p class="hint" id="m-stats"></p>
+    </div>
   </aside>
 
-  <section>
+  <section id="feed-view">
     <div class="toolbar">
       <select id="f-watch"><option value="">Toutes les surveillances</option></select>
       <select id="f-source"><option value="">Tous les sites</option></select>
@@ -227,13 +346,70 @@
     <div class="grid" id="feed"></div>
     <div class="empty" id="empty">Ajoute une surveillance (onglet « Mes recherches » sur téléphone). Les premières annonces arrivent en moins d'une minute ; le prix de référence se construit au fil des scans.</div>
   </section>
+
+  <section id="analyst-view" class="view">
+    <div class="toolbar">
+      <div class="seg" id="an-period">
+        <button type="button" data-days="1">24 h</button>
+        <button type="button" data-days="7" class="on">7 jours</button>
+        <button type="button" data-days="30">30 jours</button>
+      </div>
+      <select id="an-type"><option value="">Tous les types</option></select>
+      <select id="an-brand"><option value="">Toutes les marques</option></select>
+      <button type="button" class="ghost" id="an-refresh">↻ Actualiser</button>
+    </div>
+    <div class="kpis" id="an-kpis"></div>
+    <div id="an-note"></div>
+    <div class="an-layout">
+      <div id="an-groups"></div>
+      <div class="side">
+        <div class="panel"><h2>Marques qui se vendent</h2><ul class="rank-list" id="an-brands"></ul></div>
+        <div class="panel"><h2>Types qui se vendent</h2><ul class="rank-list" id="an-types"></ul></div>
+        <div class="panel"><h2>Partent le plus vite</h2><ul class="rank-list" id="an-fast"></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="gems-view" class="view">
+    <div class="toolbar">
+      <input type="number" id="g-budget" placeholder="Budget max €" min="0">
+      <input type="number" id="g-profit" placeholder="Profit min €" min="0">
+      <select id="g-type"><option value="">Tous les types</option></select>
+      <select id="g-brand"><option value="">Toutes les marques</option></select>
+      <select id="g-conf">
+        <option value="0">Toute confiance</option>
+        <option value="0.4">Confiance moyenne +</option>
+        <option value="0.65">Confiance haute</option>
+      </select>
+      <select id="g-sort">
+        <option value="score">Meilleur score pépite</option>
+        <option value="profit">Plus gros bénéfice</option>
+        <option value="roi">Meilleure rentabilité</option>
+        <option value="speed">Se revend le plus vite</option>
+        <option value="recent">Plus récentes</option>
+      </select>
+    </div>
+    <details class="note info" style="margin-bottom:12px">
+      <summary>Comment les pépites sont choisies</summary>
+      <p>Pour chaque annonce en vente : <b>valeur de revente</b> d'après les articles les plus similaires (même marque, même type, même modèle, état ramené au même niveau, les articles réellement <b>vendus</b> comptant double) ; <b>coût réel</b> (prix + protection acheteur + port) ; <b>bénéfice</b> en revendant un peu sous la valeur ; <b>probabilité de revente</b> et <b>délai</b> d'après les ventes détectées sur Vinted. Le score combine bénéfice espéré, rentabilité, vitesse de revente et confiance, et pénalise les risques (prix suspect, marque très contrefaite non vérifiée, peu de données). Les meilleures sont identifiées par Gemini (photos + recherche Google).</p>
+    </details>
+    <div class="grid" id="gems"></div>
+    <div class="empty" id="gems-empty" hidden>Pas encore de pépite. Ajoute des marques dans « Veille marché » (onglet Réglages) : la valeur des articles se construit au fil des scans, et les ventes détectées affinent la demande.</div>
+  </section>
 </main>
 
 <nav class="tabs">
-  <button type="button" data-tab="feed" class="on">🔥 Annonces</button>
-  <button type="button" data-tab="watches">🔎 Recherches</button>
-  <button type="button" data-tab="settings">⚙️ Réglages</button>
+  <button type="button" data-tab="feed" class="on">🔥<br>Annonces</button>
+  <button type="button" data-tab="analyst">📊<br>Analyste</button>
+  <button type="button" data-tab="gems">💎<br>Pépites</button>
+  <button type="button" data-tab="watches">🔎<br>Recherches</button>
+  <button type="button" data-tab="settings">⚙️<br>Réglages</button>
 </nav>
+
+<dialog id="dlg">
+  <div class="dlg-head"><b id="dlg-title">Détail</b><button type="button" class="ghost" onclick="$('#dlg').close()">✕</button></div>
+  <div class="dlg-body" id="dlg-body"></div>
+</dialog>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -257,12 +433,17 @@ async function api(path, opts = {}) {
   return r.status === 204 ? null : r.json();
 }
 
+let currentTab = "feed";
 function showTab(name) {
+  currentTab = name;
   $("#main").className = "tab-" + name;
-  $$(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  $$(".tabs button, .views button").forEach(b => b.classList.toggle("on", b.dataset.tab === name ||
+    (b.parentElement.classList.contains("views") && b.dataset.tab === "feed" && ["watches", "settings"].includes(name))));
   window.scrollTo(0, 0);
+  if (name === "analyst") loadAnalyst();
+  if (name === "gems") loadGems();
 }
-$$(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+$$(".tabs button, .views button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
 // ---------- construction du formulaire ----------
 function buildForm() {
@@ -399,9 +580,11 @@ function card(it, isNew) {
         ${it.discount > 0 ? `<span class="badge b-disc">−${Math.round(it.discount * 100)} %</span>` : ""}
         <span class="badge b-watch">${esc(it.watch_name)}</span>
       </div>
+      ${it.value ? `<div class="val-line">Valeur ≈ <b>${fmt(Math.round(it.value))}</b> · ${it.value_n || 0} similaires${it.profit != null ? ` · revente <b class="${it.profit >= 0 ? "" : "neg"}">${it.profit >= 0 ? "+" : ""}${fmt(Math.round(it.profit))}</b>` : ""}</div>` : ""}
       ${aiBlock(it)}
       <ul class="reasons">${reasons}</ul>
-      <div class="meta">vue ${ago(it.seen_at)}</div>
+      <div class="meta">vue ${ago(it.seen_at)}${it.market_state === "sold" ? " · <b style='color:var(--bad)'>vendu</b>" : ""}</div>
+      ${it.listing_id ? `<div class="card-actions"><button class="ghost" onclick="openListing(${it.listing_id})">🔍 Valeur & comparables</button></div>` : ""}
     </div></div>`;
 }
 
@@ -502,6 +685,7 @@ async function loadStatus() {
     $("#st-ai").className = "pill" + (ai.ready ? " ai-on" : "");
     $("#st-ai").title = ai.last_error || (ai.model ? "Modèle " + ai.model : "");
     $("#st-err").hidden = !s.last_error; $("#st-err").textContent = s.last_error || "";
+    marketStats(s);
     const used = new Set(watchesCache.filter(w => w.active).flatMap(w => String(w.sources || "vinted").split(",")));
     $("#sitebar").innerHTML = [...used].filter(k => SRC[k]).map(k => {
       const st = (s.sources || {})[k];
@@ -513,11 +697,250 @@ async function loadStatus() {
 }
 $("#scan-btn").onclick = () => api("/api/scan", { method: "POST", body: "{}" });
 
+// ---------- analyste ----------
+const pct = n => n == null ? "–" : Math.round(n * 100) + " %";
+const days = d => d == null ? "–" : d < 1 ? Math.max(1, Math.round(d * 24)) + " h" : (Math.round(d * 10) / 10).toString().replace(".", ",") + " j";
+const LEVEL = { modele: "même modèle", type: "même marque + type", marque: "même marque", gemini: "Gemini + Google" };
+let anDays = 7, anData = null;
+
+function fillTypeBrandSelects(brands) {
+  const types = '<option value="">Tous les types</option>' + META.types.map(t => `<option value="${t.key}">${esc(t.label)}</option>`).join("");
+  const br = '<option value="">Toutes les marques</option>' + brands.map(b => `<option value="${esc(b)}">${esc(b.replace(/\b\w/g, c => c.toUpperCase()))}</option>`).join("");
+  for (const id of ["#an-type", "#g-type"]) { const v = $(id).value; $(id).innerHTML = types; $(id).value = v; }
+  for (const id of ["#an-brand", "#g-brand"]) { const v = $(id).value; $(id).innerHTML = br; $(id).value = v; }
+}
+async function loadBrands() { try { fillTypeBrandSelects(await api("/api/brands")); } catch (e) {} }
+
+$$("#an-period button").forEach(b => b.onclick = () => {
+  anDays = +b.dataset.days; $$("#an-period button").forEach(x => x.classList.toggle("on", x === b)); loadAnalyst();
+});
+["#an-type", "#an-brand"].forEach(id => $(id).addEventListener("change", loadAnalyst));
+$("#an-refresh").onclick = () => { loadBrands(); loadAnalyst(); };
+
+async function loadAnalyst() {
+  const q = new URLSearchParams({ days: anDays, type: $("#an-type").value, brand: $("#an-brand").value });
+  $("#an-groups").innerHTML = '<div class="meta">Analyse en cours…</div>';
+  const r = anData = await api("/api/analyst?" + q);
+  const period = { 1: "24 h", 7: "7 jours", 30: "30 jours" }[anDays] || anDays + " j";
+  const g0 = r.groups[0];
+  $("#an-kpis").innerHTML = `
+    <div class="kpi"><small>${r.basis === "ventes" ? "Ventes détectées" : "Annonces en tendance"}</small><b>${r.count}</b><span>sur ${period}</span></div>
+    <div class="kpi"><small>Marque n°1</small><b>${esc((r.top_brands[0] || {}).label || "–")}</b><span>${(r.top_brands[0] || {}).n || 0} ${r.basis === "ventes" ? "ventes" : "annonces"}</span></div>
+    <div class="kpi"><small>Article n°1</small><b style="font-size:15px">${esc(g0 ? g0.label : "–")}</b><span>${g0 ? (r.basis === "ventes" ? `${g0.n} vendus · ${fmt(g0.median)}` : `${g0.n} annonces`) : ""}</span></div>
+    <div class="kpi"><small>Part le plus vite</small><b style="font-size:15px">${esc((r.fastest[0] || {}).label || "–")}</b><span>${r.fastest[0] ? "en " + days(r.fastest[0].days) : ""}</span></div>`;
+  $("#an-note").innerHTML = r.basis === "ventes"
+    ? `<p class="note info">Classement par <b>ventes réellement détectées</b> sur Vinted (annonces re-vérifiées jusqu'à leur vente), pondéré par le taux d'écoulement et la vitesse de vente. Les prix sont ceux des articles vendus.</p>`
+    : `<p class="note">Pas encore assez de ventes détectées sur cette période (${r.sold_total}) : classement provisoire d'après les <b>favoris</b> des annonces récentes. Active le suivi des ventes et la veille marché (Réglages) — les ventes apparaîtront au fil des heures.</p>`;
+  const li = (arr, fn) => arr.length ? arr.map(fn).join("") : '<li><span>Pas encore de données</span></li>';
+  $("#an-brands").innerHTML = li(r.top_brands, b => `<li onclick="$('#an-brand').value='${esc(b.key)}';loadAnalyst()">${esc(b.label)}<span>${b.n}</span></li>`);
+  $("#an-types").innerHTML = li(r.top_types, t => `<li onclick="$('#an-type').value='${esc(t.key)}';loadAnalyst()">${esc(t.label)}<span>${t.n}</span></li>`);
+  $("#an-fast").innerHTML = li(r.fastest, f => `<li>${esc(f.label)}<span>${days(f.days)}</span></li>`);
+  $("#an-groups").innerHTML = r.groups.length ? r.groups.map((g, i) => groupCard(g, i, r.basis)).join("")
+    : '<div class="empty">Aucune donnée sur cette période. Ajoute des marques à la veille marché (Réglages) et laisse tourner l\'appli.</div>';
+}
+
+function groupCard(g, i, basis) {
+  const photos = g.samples.map(x => `<img src="${esc(x.photo || "")}" alt="" loading="lazy" referrerpolicy="no-referrer">`).join("");
+  const sold = basis === "ventes";
+  return `<div class="group">
+    <div class="mosaic">${photos}</div>
+    <div>
+      <h3><span class="rank">#${i + 1}</span>${esc(g.label)}</h3>
+      <div class="chips">
+        <span class="chip"><b>${g.n}</b> ${sold ? "vendus" : "annonces"}</span>
+        ${g.median != null ? `<span class="chip">${sold ? "Prix de vente" : "Prix"} médian <b>${fmt(g.median)}</b> <span class="meta">(${fmt(g.low)}–${fmt(g.high)})</span></span>` : ""}
+        ${g.days_to_sell != null ? `<span class="chip ${g.days_to_sell <= 3 ? "good" : ""}">Part en <b>${days(g.days_to_sell)}</b></span>` : ""}
+        ${g.sell_through != null ? `<span class="chip">Écoulement <b>${pct(g.sell_through)}</b></span>` : ""}
+        ${g.trend != null ? `<span class="chip ${g.trend >= 0 ? "good" : "bad"}">Prix ${g.trend >= 0 ? "↗ +" : "↘ "}${pct(g.trend)}</span>` : ""}
+        <span class="chip">♥ ${String(g.favourites).replace(".", ",")} en moy.</span>
+        <span class="chip">${g.active_now} en vente suivies</span>
+      </div>
+      <div class="more"><button class="ghost" onclick="loadSimilar(this, '${esc(g.key)}', ${g.median || "null"})">🛒 Annonces très similaires à acheter maintenant</button></div>
+    </div>
+    <div class="similar" hidden></div>
+  </div>`;
+}
+
+async function loadSimilar(btn, key, ref) {
+  const box = btn.closest(".group").querySelector(".similar");
+  if (!box.hidden) { box.hidden = true; return; }
+  box.hidden = false; box.innerHTML = '<div class="meta">Recherche…</div>';
+  const list = await api("/api/analyst/similar?" + new URLSearchParams({ key, ref: ref ?? "" }));
+  box.innerHTML = list.length ? list.map(miniCard).join("") : '<div class="meta">Aucune annonce similaire en vente en ce moment.</div>';
+}
+
+function miniCard(l) {
+  const m = l.group_margin;
+  return `<a class="mini" href="#" onclick="openListing(${l.id});return false">
+    <img src="${esc(l.photo || "")}" alt="" loading="lazy" referrerpolicy="no-referrer">
+    <div><div class="p">${fmt(l.price)}</div><div class="t">${esc(l.title)}</div>
+    <div class="t">${esc(l.status || "")}${l.size ? " · " + esc(l.size) : ""}</div>
+    ${m != null ? `<div class="m ${m < 0 ? "neg" : ""}">${m >= 0 ? "Marge +" : "Marge "}${fmt(Math.round(m))}</div>` : ""}</div></a>`;
+}
+
+// ---------- pépites ----------
+let gemsTimer = null;
+["#g-budget", "#g-profit"].forEach(id => $(id).addEventListener("input", () => { clearTimeout(gemsTimer); gemsTimer = setTimeout(loadGems, 400); }));
+["#g-type", "#g-brand", "#g-conf", "#g-sort"].forEach(id => $(id).addEventListener("change", loadGems));
+
+async function loadGems() {
+  const q = new URLSearchParams({ budget: $("#g-budget").value, min_profit: $("#g-profit").value, type: $("#g-type").value,
+                                  brand: $("#g-brand").value, min_conf: $("#g-conf").value, sort: $("#g-sort").value });
+  const list = await api("/api/gems?" + q);
+  $("#gems").innerHTML = list.map(gemCard).join("");
+  $("#gems-empty").hidden = list.length > 0;
+}
+
+function aiIdent(l) {
+  if (l.ai_status === "pending") return `<div class="ai pending">⏳ Identification Gemini + Google…</div>`;
+  const d = l.ai_data || {};
+  if (l.ai_status === "error") return `<div class="ai error">Gemini : ${esc(d.erreur || "échec")} <button class="ghost" onclick="identify(${l.id})">Réessayer</button></div>`;
+  if (l.ai_status !== "done") return "";
+  const occ = d.prix_occasion_eur || {};
+  const v = (d.authenticite === "suspect") ? "eviter" : (d.authenticite === "doute" ? "a_verifier" : "acheter");
+  return `<div class="ai ${v}">
+    <div class="v">${esc(d.modele_exact || "Modèle non identifié")}</div>
+    ${occ.median ? `<div>Occasion : <b>${fmt(+occ.median)}</b> (${fmt(+occ.bas)}–${fmt(+occ.haut)})${d.prix_neuf_eur ? ` · neuf ${fmt(+d.prix_neuf_eur)}` : ""}</div>` : ""}
+    <div>${esc(d.resume || "")}</div>
+    <details><summary>Détails${d.google ? " · recherche Google" : ""}</summary>
+      ${d.reference ? `<div>Référence : ${esc(d.reference)}</div>` : ""}
+      ${d.authenticite ? `<div>Authenticité : <b>${esc(String(d.authenticite).replace(/_/g, " "))}</b></div>` : ""}
+      ${d.demande ? `<div>Demande : ${esc(d.demande)}</div>` : ""}
+      ${d.prix_achat_max_eur ? `<div>Prix d'achat max conseillé : <b>${fmt(+d.prix_achat_max_eur)}</b></div>` : ""}
+      ${(d.points_attention || []).length ? `<ul>${d.points_attention.slice(0, 4).map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+      ${(d.sources || []).length ? `<div class="src">${d.sources.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>`).join("")}</div>` : ""}
+    </details></div>`;
+}
+
+function gemCard(l) {
+  const src = (SRC[l.source] || {}).label || l.source;
+  const conf = Math.round((l.confidence || 0) * 100);
+  return `<div class="card">
+    <a class="ph" href="${esc(l.url)}" target="_blank" rel="noopener">
+      <img src="${esc(l.photo || "")}" loading="lazy" alt="" referrerpolicy="no-referrer">
+      <span class="src-badge">${esc(src)}</span>
+      <span class="gem-score ${l.gem_score >= 75 ? "hot" : ""}">💎 ${Math.round(l.gem_score)}</span></a>
+    <div class="body">
+      <div class="price">${fmt(l.price)}${l.price_drops ? ` <small>↓ prix baissé</small>` : ""}</div>
+      <a class="t title" href="${esc(l.url)}" target="_blank" rel="noopener" title="${esc(l.title)}">${esc(l.title)}</a>
+      <div class="meta">${esc([l.type_label, l.size, l.status].filter(Boolean).join(" · "))}</div>
+      <div class="money">
+        <div>Valeur<br><b>${fmt(Math.round(l.value))}</b> <span class="meta">${fmt(Math.round(l.value_low))}–${fmt(Math.round(l.value_high))}</span></div>
+        <div>Bénéfice net<br><b class="${l.profit >= 0 ? "pos" : "neg"}">${l.profit >= 0 ? "+" : ""}${fmt(Math.round(l.profit))}</b> <span class="meta">${pct(l.roi)}</span></div>
+        <div>Revente<br><b>~${days(l.days_to_sell)}</b> <span class="meta">${pct(l.p_sell)} de chances</span></div>
+        <div>Confiance ${conf} %<div class="conf"><i style="width:${conf}%"></i></div><span class="meta">${l.value_n || 0} similaires · ${LEVEL[l.value_level] || ""}</span></div>
+      </div>
+      ${(l.flag_labels || []).length ? `<ul class="flags">${l.flag_labels.map(f => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}
+      ${aiIdent(l)}
+      <div class="card-actions">
+        <button class="ghost" onclick="openListing(${l.id})">🔍 Comparables</button>
+        ${l.ai_status !== "done" && l.ai_status !== "pending" ? `<button class="ghost" onclick="identify(${l.id})">🤖 Identifier (Gemini + Google)</button>` : ""}
+        <a class="ghost" href="${esc(l.url)}" target="_blank" rel="noopener">Ouvrir ↗</a>
+      </div>
+      <div class="meta">vue ${ago(l.first_seen)}${l.favourites ? ` · ♥ ${l.favourites}` : ""}</div>
+    </div></div>`;
+}
+
+async function identify(id) {
+  try {
+    const r = await api(`/api/listings/${id}/identify`, { method: "POST", body: "{}" });
+    if (currentTab === "gems") loadGems();
+    if ($("#dlg").open) openListing(id);
+    pollIdent(id);
+  } catch (e) { alert(e.message); }
+}
+function pollIdent(id, n = 0) {
+  setTimeout(async () => {
+    const r = await api(`/api/listings/${id}`).catch(() => null);
+    if (!r) return;
+    if (r.listing.ai_status === "pending" && n < 40) return pollIdent(id, n + 1);
+    if (currentTab === "gems") loadGems();
+    if ($("#dlg").open && $("#dlg").dataset.id == id) openListing(id);
+  }, 4000);
+}
+
+// ---------- fiche valeur & comparables ----------
+async function openListing(id) {
+  const r = await api(`/api/listings/${id}`);
+  const l = r.listing, v = r.valuation, f = r.flip, d = r.demand;
+  $("#dlg").dataset.id = id;
+  $("#dlg-title").textContent = l.title;
+  const cs = await r.comparables;
+  $("#dlg-body").innerHTML = `
+    <div class="dlg-top">
+      <img src="${esc(l.photo || "")}" alt="" referrerpolicy="no-referrer">
+      <div>
+        <div class="price">${fmt(l.price)}</div>
+        <div class="meta">${esc([l.brand, l.type_label, l.size, l.status].filter(Boolean).join(" · "))}</div>
+        ${v ? `<p style="margin:8px 0 4px">Valeur de revente estimée : <b style="font-size:18px">${fmt(Math.round(v.value))}</b>
+              <span class="meta">(${fmt(Math.round(v.low))} – ${fmt(Math.round(v.high))})</span></p>
+              <div class="meta">D'après ${esc(r.basis)} · confiance ${Math.round(v.confidence * 100)} %${v.gemini ? ` · Gemini : ${fmt(Math.round(v.gemini))}` : ""}</div>`
+            : `<p class="note">Pas encore assez d'articles similaires pour estimer la valeur.</p>`}
+        <div class="meta" style="margin-top:4px">Demande : ${pct(d.p_sell)} de chances de revendre · délai ~${days(d.days)} · ${d.sold_30d} ventes similaires / 30 j</div>
+        <table class="calc">
+          <tr><td>Coût total (prix + protection acheteur + port)</td><td>${fmt(f.cost)}</td></tr>
+          ${f.resale != null ? `<tr><td>Revente visée</td><td>${fmt(f.resale)}</td></tr>
+          <tr><td><b>Bénéfice net</b></td><td><b class="${f.profit >= 0 ? "pos" : "neg"}">${f.profit >= 0 ? "+" : ""}${fmt(f.profit)}</b> (${pct(f.roi)})</td></tr>
+          <tr><td>Score pépite</td><td>💎 ${Math.round(f.gem_score)}</td></tr>` : ""}
+        </table>
+        ${(r.flag_labels || []).length ? `<ul class="flags">${r.flag_labels.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+        <div class="card-actions">
+          ${l.ai_status !== "pending" ? `<button class="ghost" onclick="identify(${l.id})">🤖 ${l.ai_status === "done" ? "Ré-identifier" : "Identifier"} avec Gemini + Google</button>` : ""}
+          <a class="ghost" href="${esc(l.url)}" target="_blank" rel="noopener">Ouvrir l'annonce ↗</a>
+        </div>
+      </div>
+    </div>
+    ${aiIdent(l)}
+    <h4 style="margin:16px 0 6px">Articles similaires utilisés pour la valeur</h4>
+    ${r.comparables.length ? r.comparables.map(c => `<a class="comp" href="${esc(c.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">
+        <img src="${esc(c.photo || "")}" alt="" loading="lazy" referrerpolicy="no-referrer">
+        <div><div>${esc(c.title)}</div><div class="meta">${esc([c.status, c.size, (SRC[c.source] || {}).label].filter(Boolean).join(" · "))}</div></div>
+        <div style="text-align:right"><b>${fmt(c.price)}</b><br><span class="st ${c.state === "sold" ? "sold" : "active"}">${c.state === "sold" ? "VENDU" : "en vente"}</span></div></a>`).join("")
+      : '<div class="meta">Aucun pour l\'instant.</div>'}`;
+  if (!$("#dlg").open) $("#dlg").showModal();
+}
+
+// ---------- réglages veille marché ----------
+const M_FIELDS = { "#m-perhour": "tracker_per_hour", "#m-notify": "gems_notify_score", "#m-aiscore": "gems_ai_score",
+  "#m-fee-fixed": "buy_fee_fixed", "#m-fee-pct": "buy_fee_pct", "#m-ship": "ship_in", "#m-sellfee": "sell_fee_pct", "#m-minprofit": "min_profit" };
+function fillMarket(s) {
+  $("#m-terms").value = s.market_terms || "";
+  $("#m-interval").value = String(Math.round(s.market_interval || 600));
+  if (!$("#m-interval").value) $("#m-interval").value = "600";
+  for (const [id, k] of Object.entries(M_FIELDS)) $(id).value = s[k];
+  $("#m-resale").value = Math.round((s.resale_factor || 0.95) * 100);
+  $("#m-tracker").checked = !!s.tracker_enabled; $("#m-autoai").checked = !!s.gems_auto_ai;
+}
+$("#m-popular").onclick = () => {
+  const cur = $("#m-terms").value.split(",").map(x => x.trim()).filter(Boolean);
+  const add = META.popular_terms.split(",").map(x => x.trim()).filter(x => !cur.includes(x));
+  $("#m-terms").value = [...cur, ...add].join(", ");
+};
+$("#m-save").onclick = async () => {
+  const body = { market_terms: $("#m-terms").value, market_interval: $("#m-interval").value, tracker_enabled: $("#m-tracker").checked,
+                 gems_auto_ai: $("#m-autoai").checked, resale_factor: (+$("#m-resale").value || 95) / 100 };
+  for (const [id, k] of Object.entries(M_FIELDS)) body[k] = $(id).value;
+  try { fillMarket(await api("/api/settings", { method: "POST", body: JSON.stringify(body) }));
+        const m = $("#m-msg"); m.textContent = "Enregistré. La veille démarre au prochain cycle."; m.className = "msg ok"; }
+  catch (e) { const m = $("#m-msg"); m.textContent = e.message; m.className = "msg err"; }
+};
+function marketStats(s) {
+  const c = s.market_counts || {}, t = s.tracker || {};
+  const route = t.route ? (t.route === "html" ? "page de l'annonce" : "API") : "…";
+  $("#m-stats").innerHTML = `📈 ${c.listings || 0} annonces en base · ${c.tracked || 0} suivies · <b>${c.sold || 0} ventes détectées</b>` +
+    (t.checked ? ` · ${t.checked} vérifications (${route})` : "") +
+    (t.last_error ? `<br><span style="color:var(--warn)">${esc(t.last_error)}</span>` : "") +
+    (s.market && s.market.error ? `<br><span style="color:var(--warn)">Veille : ${esc(s.market.error)}</span>` : "");
+}
+setInterval(() => { if (currentTab === "gems" && !$("#dlg").open && !document.hidden) loadGems(); }, 30000);
+
+
 (async () => {
   META = await api("/api/meta");
   META.sources.forEach(s => SRC[s.key] = s);
   buildForm();
-  await loadWatches(); loadSettings(); poll(); loadStatus();
+  await loadWatches(); loadSettings().then(fillMarket); poll(); loadStatus(); loadBrands();
+  setInterval(loadBrands, 300000);
   setInterval(poll, 5000); setInterval(loadStatus, 4000); setInterval(loadWatches, 15000);
 })();
 </script>

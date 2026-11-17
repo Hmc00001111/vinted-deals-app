@@ -56,6 +56,34 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, avec exactemen
 Sois prudent : si les photos ne permettent pas de juger, dis-le et choisis "a_verifier"."""
 
 
+IDENTIFY_PROMPT = """Tu es un expert de l'achat-revente de mode d'occasion (Vinted, Vestiaire, Grailed, eBay).
+Identifie précisément cet article à partir des PHOTOS jointes et du texte de l'annonce, puis estime sa
+valeur de revente d'occasion. Utilise la recherche Google : cherche le modèle exact (nom, référence,
+collection, année) et des prix réels d'articles identiques ou très proches, d'occasion, en Europe.
+Tiens compte de l'état annoncé et de l'état visible.
+
+Annonce :
+{context}
+
+Réponds UNIQUEMENT avec un objet JSON valide (pas de texte autour, pas de ```), avec ces clés :
+{{
+  "marque": "marque exacte",
+  "type": "type d'article (pull, jean, veste, baskets…)",
+  "modele_exact": "nom précis du modèle, ou null si impossible à dire",
+  "reference": "référence / collection / année si trouvée, sinon null",
+  "matiere": "matière principale si visible ou indiquée, sinon null",
+  "prix_neuf_eur": nombre ou null,
+  "prix_occasion_eur": {{"bas": nombre, "median": nombre, "haut": nombre}},
+  "confiance": "haute" | "moyenne" | "faible",
+  "authenticite": "probable" | "doute" | "suspect" | "impossible_a_dire",
+  "demande": "forte" | "moyenne" | "faible",
+  "prix_achat_max_eur": nombre (prix maximum à payer pour revendre avec profit),
+  "prix_revente_conseille_eur": nombre,
+  "points_attention": ["2 à 4 points courts"],
+  "resume": "2 phrases max en français : ce que c'est, ce que ça vaut, faut-il l'acheter pour revendre"
+}}"""
+
+
 class AIError(Exception):
     pass
 
@@ -94,8 +122,39 @@ def _thinking(model: str, effort: str) -> dict | None:
     return None
 
 
+class NoGrounding(AIError):
+    pass
+
+
 def call_gemini(key: str, model: str, prompt: str, images: list[tuple[str, bytes]] | None = None,
                 json_mode: bool = True, timeout: int = 90, effort: str = "low") -> str:
+    data = generate(key, model, prompt, images, json_mode, timeout, effort)
+    return response_text(data)
+
+
+def response_text(data: dict) -> str:
+    cands = data.get("candidates") or []
+    if not cands:
+        reason = (data.get("promptFeedback") or {}).get("blockReason")
+        raise AIError(f"Gemini n'a pas répondu ({reason or 'réponse vide'})")
+    texts = [p.get("text", "") for p in (cands[0].get("content") or {}).get("parts", [])
+             if not p.get("thought")]
+    return "".join(texts)
+
+
+def grounding_sources(data: dict) -> list[dict]:
+    """Pages web consultées par Gemini lors de sa recherche Google."""
+    out = []
+    for c in (data.get("candidates") or [])[:1]:
+        for ch in ((c.get("groundingMetadata") or {}).get("groundingChunks") or []):
+            web = ch.get("web") or {}
+            if web.get("uri"):
+                out.append({"url": web["uri"], "title": web.get("title") or web.get("domain") or "source"})
+    return out[:8]
+
+
+def generate(key: str, model: str, prompt: str, images: list[tuple[str, bytes]] | None = None,
+             json_mode: bool = True, timeout: int = 90, effort: str = "low", google_search: bool = False) -> dict:
     parts: list[dict] = [{"text": prompt}]
     for mime, data in images or []:
         parts.append({"inline_data": {"mime_type": mime, "data": base64.b64encode(data).decode()}})
@@ -106,6 +165,9 @@ def call_gemini(key: str, model: str, prompt: str, images: list[tuple[str, bytes
     if think:
         gen["thinkingConfig"] = think
     body: dict = {"contents": [{"role": "user", "parts": parts}], "generationConfig": gen}
+    if google_search:
+        body["tools"] = [{"google_search": {}}]
+        gen.pop("responseMimeType", None)  # certains modèles refusent JSON + outils ensemble
     for attempt in range(2):
         try:
             r = requests.post(API.format(model=model), json=body, timeout=(15, timeout),
@@ -128,6 +190,8 @@ def call_gemini(key: str, model: str, prompt: str, images: list[tuple[str, bytes
             msg = r.json().get("error", {}).get("message", "")
         except ValueError:
             pass
+        if google_search and r.status_code == 400 and any(w in msg.lower() for w in ("tool", "search", "ground")):
+            raise NoGrounding(msg)
         if "API key" in msg or r.status_code in (401, 403):
             raise AIError("Clé Gemini refusée : vérifie-la dans les réglages")
         if "model" in msg.lower() and ("not found" in msg.lower() or "not supported" in msg.lower()):
@@ -135,14 +199,7 @@ def call_gemini(key: str, model: str, prompt: str, images: list[tuple[str, bytes
         raise AIError(f"Gemini : {msg or 'requête refusée'}")
     if r.status_code >= 400:
         raise AIError(f"Gemini : HTTP {r.status_code}")
-    data = r.json()
-    cands = data.get("candidates") or []
-    if not cands:
-        reason = (data.get("promptFeedback") or {}).get("blockReason")
-        raise AIError(f"Gemini n'a pas répondu ({reason or 'réponse vide'})")
-    texts = [p.get("text", "") for p in (cands[0].get("content") or {}).get("parts", [])
-             if not p.get("thought")]
-    return "".join(texts)
+    return r.json()
 
 
 def list_models(key: str) -> list[str]:
@@ -210,8 +267,10 @@ class Analyzer(threading.Thread):
         self.on_done = on_done
         self.q: queue.Queue[int] = queue.Queue()
         self.recent: list[float] = []
-        self.status = {"last_error": None, "model": None, "analysed": 0, "queued": 0}
+        self.status = {"last_error": None, "model": None, "analysed": 0, "queued": 0, "grounding": None}
         self.available: list[str] | None = None
+        self.on_identified: Callable[[int], None] | None = None
+        self._no_search_until = 0.0
 
     def settings(self) -> dict:
         s = dict(DEFAULT_SETTINGS)
@@ -222,21 +281,107 @@ class Analyzer(threading.Thread):
         s = self.settings()
         return bool(s.get("ai_enabled") and s.get("gemini_key"))
 
-    def enqueue(self, item_id: int) -> None:
-        self.q.put(item_id)
+    def enqueue(self, job) -> None:
+        """job : id d'une bonne affaire (int) ou ("identify", id d'annonce du marché)."""
+        self.q.put(job)
         self.status["queued"] = self.q.qsize()
 
     def run(self) -> None:
         for item_id in self.db.items_with_ai_status("pending"):  # reprise après redémarrage
             self.q.put(item_id)
+        for l in self.db.query_listings("ai_status = 'pending'", [], limit=50):
+            self.q.put(("identify", l["id"]))
         while True:
-            item_id = self.q.get()
+            job = self.q.get()
             self.status["queued"] = self.q.qsize()
             try:
-                self._process(item_id)
+                if isinstance(job, tuple) and job[0] == "identify":
+                    self._identify(job[1])
+                else:
+                    self._process(job)
             except Exception as e:  # ne jamais tuer le fil
-                log.exception("Analyse %s", item_id)
+                log.exception("Analyse %s", job)
                 self.status["last_error"] = str(e)
+
+    def _quota_ok(self, s: dict) -> bool:
+        now = time.time()
+        self.recent = [t for t in self.recent if now - t < 3600]
+        if len(self.recent) >= int(s.get("ai_max_per_hour") or 30):
+            return False
+        self.recent.append(now)
+        return True
+
+    def _identify(self, lid: int) -> None:
+        l = self.db.get_listing(lid)
+        if not l:
+            return
+        s = self.settings()
+        if not (s.get("ai_enabled") and s.get("gemini_key")):
+            self.db.update_listing(lid, {"ai_status": None})
+            return
+        if not self._quota_ok(s):
+            self.db.update_listing(lid, {"ai_status": "error",
+                                         "ai_data": {"erreur": "Limite d'analyses par heure atteinte"}})
+            return
+        try:
+            result = self.identify(l, s)
+        except AIError as e:
+            self.status["last_error"] = str(e)
+            self.db.update_listing(lid, {"ai_status": "error", "ai_data": {"erreur": str(e)}, "ai_at": time.time()})
+            return
+        self.status["last_error"] = None
+        self.status["analysed"] += 1
+        self.db.update_listing(lid, {"ai_status": "done", "ai_data": result, "ai_at": time.time()})
+        if self.on_identified:
+            self.on_identified(lid)
+
+    def identify(self, l: dict, s: dict) -> dict:
+        """Identification du modèle exact + valeur de revente, avec recherche Google (si disponible)."""
+        photos = (l.get("photos") or [])[:3] or ([l["photo"]] if l.get("photo") else [])
+        images = [img for img in (fetch_image(u) for u in photos) if img]
+        lines = [
+            f"- Site : {l.get('source')}", f"- Titre : {l.get('title')}",
+            f"- Marque : {l.get('brand') or 'non renseignée'}", f"- Taille : {l.get('size') or 'non renseignée'}",
+            f"- État déclaré : {l.get('status') or 'non renseigné'}", f"- Prix demandé : {l.get('price') or 0:.2f} €",
+        ]
+        if l.get("value"):
+            lines.append(f"- Valeur estimée par notre base d'annonces similaires : {l['value']:.0f} € "
+                         f"({l.get('value_n') or 0} comparables)")
+        if not images:
+            lines.append("- (photos indisponibles : base-toi sur le texte, confiance faible)")
+        prompt = IDENTIFY_PROMPT.format(context="\n".join(lines))
+        if self.available is None:
+            try:
+                self.available = list_models(s["gemini_key"])
+            except AIError:
+                self.available = []
+        models = candidate_models(self.status.get("model") or s.get("gemini_model"), self.available or None)
+        problems = []
+        use_search = self.status.get("grounding") is not False or time.time() > self._no_search_until
+        for model in models[:4]:
+            try:
+                try:
+                    data = generate(s["gemini_key"], model, prompt, images, json_mode=not use_search,
+                                    timeout=120, effort="low", google_search=use_search)
+                except (NoGrounding, RateLimited) as e:
+                    if not use_search:
+                        raise
+                    log.info("Recherche Google indisponible avec Gemini (%s) : identification sans", e)
+                    self.status["grounding"] = False
+                    self._no_search_until = time.time() + 3600  # on réessaiera dans une heure
+                    use_search = False
+                    data = generate(s["gemini_key"], model, prompt, images, json_mode=True, timeout=120)
+                self.status["model"] = model
+                result = _extract_json(response_text(data))
+                result["sources"] = grounding_sources(data)
+                result["google"] = bool(use_search)
+                if use_search:
+                    self.status["grounding"] = True
+                return result
+            except (ModelNotFound, SlowModel) as e:
+                problems.append(str(e))
+                continue
+        raise AIError("Gemini indisponible pour le moment (" + " ; ".join(problems[:2]) + ")")
 
     def _process(self, item_id: int) -> None:
         row = self.db.get_item(item_id)
@@ -247,13 +392,10 @@ class Analyzer(threading.Thread):
             self.db.update_item(item_id, {"ai_status": "skipped"})
             self.on_done(item_id, None, "Analyse Gemini désactivée")
             return
-        now = time.time()
-        self.recent = [t for t in self.recent if now - t < 3600]
-        if len(self.recent) >= int(s.get("ai_max_per_hour") or 30):
+        if not self._quota_ok(s):
             self.db.update_item(item_id, {"ai_status": "skipped", "ai_summary": "Limite d'analyses par heure atteinte"})
             self.on_done(item_id, None, "limite horaire atteinte")
             return
-        self.recent.append(now)
         try:
             result = self.analyse(row, s)
         except RateLimited as e:

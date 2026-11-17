@@ -13,6 +13,7 @@ import requests
 from ai import DEFAULT_SETTINGS, VERDICTS, Analyzer
 from categories import parse_categories
 from db import DB
+from market import Market, SaleTracker
 from scoring import MIN_SAMPLES, brand_ok, evaluate, excluded_by, matches_filters
 from sources import SOURCES, Blocked, SourceError
 from sources.base import FX_TO_EUR
@@ -94,11 +95,20 @@ class Monitor(threading.Thread):
         self.status: dict = {"running": True, "last_cycle": None, "last_error": None, "cycles": 0,
                              "scanning": None, "sources": {}}
         self.ai = Analyzer(db, self._ai_done)
+        self.market = Market(db)
+        self.market.notify = self._gem_alert
+        self.market.ai_enqueue = lambda lid: self.ai.enqueue(("identify", lid))
+        self.market.ai_ready = self.ai.ready
+        self.ai.on_identified = self._identified
+        self.tracker = SaleTracker(self.market, domain)
+        self.market_next: dict[str, float] = {}
+        self.status["market"] = {"scanning": None, "last": None, "error": None}
 
     # ---------- cycle de vie ----------
     def start(self) -> None:
         threading.Thread(target=refresh_fx, daemon=True).start()
         self.ai.start()
+        self.tracker.start()
         super().start()
 
     def client(self, key: str):
@@ -126,6 +136,11 @@ class Monitor(threading.Thread):
             if due:
                 self.status.update(last_cycle=time.time(), cycles=self.status["cycles"] + 1)
             self.status["scanning"] = None
+            try:
+                self._market_cycle()
+            except Exception as e:
+                log.exception("Veille marché")
+                self.status["market"]["error"] = f"Erreur inattendue : {e}"
             self.wake.wait(2)
             self.wake.clear()
 
@@ -193,11 +208,12 @@ class Monitor(threading.Thread):
                     known.add(it.id)
                     if excluded_by(it, watch):
                         continue
+                    listing = self.market.ingest(it, "watch", notify=False)
                     samples = self.db.price_samples(wid, key)
                     label = f" sur {client.label}"
                     if len(samples) < MIN_SAMPLES:
                         samples, label = self.db.price_samples(wid), " (tous sites)"
-                    verdict = evaluate(it, watch, samples, label)
+                    verdict = evaluate(it, watch, samples, label, listing)
                     match = matches_filters(it, watch)
                     is_deal = verdict.is_deal and match
                     alert = is_deal and not first_scan
@@ -215,6 +231,9 @@ class Monitor(threading.Thread):
                         "ai_status": "pending" if use_ai else ("skipped" if is_deal else None),
                         "notified": 0 if alert else 1,
                     })
+                    if listing and listing.get("_is_new"):
+                        # pépite : alerte seulement si la surveillance n'alerte pas déjà (et pas au 1er scan)
+                        self.market._after_new(listing, alert=not alert and not first_scan)
                     if alert and row_id:
                         deals += 1
                         log.info("BONNE AFFAIRE [%s/%s] %s — %.2f € (score %s)",
@@ -224,6 +243,59 @@ class Monitor(threading.Thread):
                         else:
                             self._alert(row_id, None)
         return found, deals
+
+    # ---------- veille marché (nourrit l'analyste et les pépites) ----------
+    def _market_cycle(self) -> None:
+        s = self.market.settings()
+        terms = split_list(s.get("market_terms"))
+        if not terms:
+            return
+        now = time.time()
+        iv = max(120, int(float(s.get("market_interval") or 600)))
+        for term in terms:
+            if self.stop_flag.is_set() or self.market_next.get(term, 0) > now:
+                continue
+            if any(self.next_run.get(w["id"], 0) <= time.time() for w in self.db.list_watches(active_only=True)):
+                return  # les surveillances passent en priorité
+            first = term not in self.market_next
+            self.status["market"]["scanning"] = term
+            try:
+                client = self.client("vinted")
+                for page in range(1, (3 if first else 1) + 1):
+                    items = client.search(term, page=page)
+                    for it in reversed(items or []):
+                        self.market.ingest(it, "market", notify=not first)  # 1er passage : pas d'alerte
+                    if not items:
+                        break
+                self.status["market"].update(last=time.time(), error=None)
+            except (Blocked, SourceError) as e:
+                self.status["market"]["error"] = str(e)
+                self.client("vinted").reset()
+            finally:
+                self.status["market"]["scanning"] = None
+                self.market_next[term] = time.time() + iv * random.uniform(1.0, 1.2)
+
+    def _gem_alert(self, l: dict) -> None:
+        if l.get("state") not in (None, "active"):
+            return
+        val = l.get("value") or 0
+        row = dict(l)
+        row.update(
+            id=1_000_000 + int(l["id"]), watch_name="💎 Pépite",
+            source_label=SOURCES[l["source"]].label if l["source"] in SOURCES else l["source"],
+            score=l.get("gem_score") or 0,
+            discount=(1 - l["price"] / val) if val else None,
+            reasons=[f"Revente estimée {val:.0f} € → +{(l.get('profit') or 0):.0f} € net "
+                     f"({(l.get('roi') or 0):.0%})",
+                     f"Se revend en ~{str(l.get('days_to_sell') or '?').replace('.', ',')} j · "
+                     f"{(l.get('p_sell') or 0):.0%} de chances"],
+        )
+        notify(row, None, priority=(l.get("gem_score") or 0) >= 85)
+
+    def _identified(self, lid: int) -> None:
+        l = self.db.get_listing(lid)
+        if l:
+            self.market.rescore(l)
 
     # ---------- alertes ----------
     def _ai_done(self, item_id: int, result: dict | None, error: str | None) -> None:

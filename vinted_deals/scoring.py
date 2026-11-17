@@ -107,18 +107,30 @@ class Verdict:
     reasons: list[str] = field(default_factory=list)
 
 
-def evaluate(item: Item, watch: dict, samples: list[float], samples_label: str = "") -> Verdict:
+def evaluate(item: Item, watch: dict, samples: list[float], samples_label: str = "",
+             listing: dict | None = None) -> Verdict:
+    """listing : l'annonce telle que valorisée par le marché (valeur d'après des articles similaires)."""
     reasons: list[str] = []
     score = 20.0
 
     manual_ref = watch.get("ref_price")
-    ref = float(manual_ref) if manual_ref else reference_price(samples)
+    smart = listing if listing and listing.get("value") and (listing.get("confidence") or 0) >= 0.25 else None
+    if manual_ref:
+        ref = float(manual_ref)
+        origin = "votre prix de référence"
+    elif smart:
+        from valuation import basis_text
+        ref = float(smart["value"])
+        origin = "valeur estimée sur " + basis_text({
+            "level": smart.get("value_level") or "type", "n": smart.get("value_n") or 0,
+            "n_sold": 0})
+    else:
+        ref = reference_price(samples)
+        origin = f"médiane de {len(samples)} annonces{samples_label}"
     discount = None
     if ref:
         discount = 1 - item.price / ref
         score += max(-40.0, min(60.0, discount * 100))
-        origin = "votre prix de référence" if manual_ref else \
-            f"médiane de {len(samples)} annonces{samples_label}"
         if discount > 0:
             reasons.append(f"{discount:.0%} sous le marché ({ref:.0f} €, {origin})")
         else:
@@ -129,6 +141,8 @@ def evaluate(item: Item, watch: dict, samples: list[float], samples_label: str =
     else:
         score += 15
         reasons.append(f"Référence en construction ({len(samples)}/{MIN_SAMPLES} annonces)")
+    if smart and smart.get("profit") is not None and smart["profit"] > 0:
+        reasons.append(f"Revente estimée : +{smart['profit']:.0f} € net")
 
     rare_words = parse_list(watch.get("rare_keywords")) or DEFAULT_RARE_KEYWORDS
     title = norm(item.title)

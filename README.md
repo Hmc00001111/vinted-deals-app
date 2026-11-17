@@ -4,6 +4,12 @@ Surveille en continu les nouvelles annonces de Vinted, Vestiaire Collective, Gra
 (prix sous le marché, articles rares) selon tes filtres : sites, marque, mots-clés, prix, état, taille,
 catégories, fréquence de scan — puis Gemini analyse les photos des meilleures annonces.
 
+Trois écrans : **🔥 Annonces** (tes surveillances), **📊 Analyste** (ce qui se vend le plus sur
+24 h / 7 j / 30 j, et les annonces similaires à acheter), **💎 Pépites** (achats-reventes rentables,
+avec bénéfice net, délai de revente et confiance). La valeur de chaque article est estimée d'après
+des articles similaires (marque, type, modèle, état) et, sur demande, identifiée par Gemini avec la
+recherche Google.
+
 - `vinted_deals/` : le programme Python (version PC) — voir `vinted_deals/README.md`.
 - `android/` : l'application Android. Elle embarque **le même code Python** (via Chaquopy),
   le fait tourner dans un service en arrière-plan et envoie une notification par bonne affaire.

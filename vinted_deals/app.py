@@ -6,6 +6,7 @@ Options   :  python app.py --interval 90 --domain www.vinted.be --port 8000
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import threading
 import time
@@ -20,6 +21,7 @@ from db import DB
 from market import DEFAULT_MARKET_SETTINGS, POPULAR_TERMS
 from monitor import MIN_INTERVAL, Monitor
 from product import ITEM_TYPES
+from robot import DEFAULT_ROBOT_SETTINGS, suggest_offer
 from valuation import FLAG_LABELS, basis_text
 from scoring import DEFAULT_EXCLUDE_KEYWORDS, DEFAULT_RARE_KEYWORDS
 from sources import SOURCES, STATUS_LABELS, source_meta
@@ -29,7 +31,7 @@ app = Flask(__name__)
 db: DB
 monitor: Monitor
 
-INTERVALS = [(30, "30 s"), (60, "1 min"), (120, "2 min"), (300, "5 min"), (600, "10 min"),
+INTERVALS = [(10, "10 s ⚡ (1-2 recherches max)"), (15, "15 s ⚡"), (30, "30 s"), (60, "1 min"), (120, "2 min"), (300, "5 min"), (600, "10 min"),
              (900, "15 min"), (1800, "30 min"), (3600, "1 h")]
 
 
@@ -89,6 +91,7 @@ def clean_watch(data: dict, partial: bool = False) -> dict:
 def public_settings() -> dict:
     s = dict(DEFAULT_SETTINGS)
     s.update(DEFAULT_MARKET_SETTINGS)
+    s.update(DEFAULT_ROBOT_SETTINGS)
     s.update(db.settings())
     key = s.pop("gemini_key", "") or ""
     s["gemini_key_set"] = bool(key)
@@ -206,9 +209,25 @@ def save_settings():
     for k, (lo, hi) in bounds.items():
         if k in data and data[k] not in (None, ""):
             out[k] = max(lo, min(hi, float(_num(data[k]))))
-    for k in ("tracker_enabled", "gems_auto_ai"):
+    for k in ("tracker_enabled", "gems_auto_ai", "robot_require_ai"):
         if k in data:
             out[k] = bool(data[k])
+    # robot
+    if data.get("robot_mode") in ("off", "offers", "auto"):
+        out["robot_mode"] = data["robot_mode"]
+    if data.get("robot_pay") in ("manual", "auto"):
+        out["robot_pay"] = data["robot_pay"]
+    rb = {"robot_min_score": (0, 100), "robot_min_profit": (0, 10000), "robot_min_conf": (0, 1),
+          "robot_max_item": (1, 100000), "robot_day_budget": (0, 1000000), "robot_day_items": (0, 1000),
+          "robot_day_offers": (0, 1000), "robot_pause_until": (0, 1e11)}
+    for k, (lo, hi) in rb.items():
+        if k in data and data[k] not in (None, ""):
+            out[k] = max(lo, min(hi, float(_num(data[k]))))
+    if "robot_brands" in data:
+        out["robot_brands"] = _join(data["robot_brands"])
+    if "robot_offer_template" in data:
+        out["robot_offer_template"] = (data["robot_offer_template"] or "").strip()[:500] or \
+            DEFAULT_ROBOT_SETTINGS["robot_offer_template"]
     db.set_settings(out)
     return jsonify(public_settings())
 
@@ -261,6 +280,132 @@ def brands_view():
     with idx.lock:
         top = [b for b, n in idx.brand_count.most_common(300) if n > 0 and b]
     return jsonify(top)
+
+
+# ---------- catalogue de marques ----------
+_verify_src = None
+_verify_pool = ThreadPoolExecutor(max_workers=2)
+
+@app.get("/api/brands/suggest")
+def brands_suggest():
+    return jsonify(monitor.brands.suggest(request.args.get("q", ""), int(request.args.get("limit") or 12)))
+
+
+@app.get("/api/brands/all")
+def brands_all():
+    return jsonify(monitor.brands.all())
+
+
+@app.post("/api/brands/verify")
+def brands_verify():
+    name = (request.get_json(force=True) or {}).get("name", "")
+
+    def search(q):
+        global _verify_src
+        if _verify_src is None:
+            from sources.vinted import VintedSource
+            _verify_src = VintedSource(monitor.domain)
+        fut = _verify_pool.submit(_verify_src.search, q)
+        try:
+            return fut.result(timeout=10)  # pas de réponse de Vinted : on se contente de la liste connue
+        except Exception:
+            return []
+    return jsonify(monitor.brands.verify(name, search))
+
+
+# ---------- robot ----------
+@app.get("/api/robot")
+def robot_view():
+    r = monitor.robot
+    s = r.settings()
+    return jsonify(settings={k: s[k] for k in DEFAULT_ROBOT_SETTINGS}, today=r.today(), actions=r.actions(60),
+                   executor=r.executor, portfolio=r.portfolio())
+
+
+@app.get("/api/listings/<int:lid>/offer")
+def listing_offer(lid):
+    l = db.get_listing(lid)
+    if not l:
+        return jsonify(error="Annonce introuvable"), 404
+    l = analyst.public_listing(l)
+    s = monitor.robot.settings()
+    return jsonify(suggest_offer(l, s) | {"rules": monitor.robot.check_rules(l, s)})
+
+
+@app.post("/api/listings/<int:lid>/action")
+def listing_action(lid):
+    data = request.get_json(force=True) or {}
+    l = db.get_listing(lid)
+    if not l:
+        return jsonify(error="Annonce introuvable"), 404
+    kind = data.get("kind")
+    if kind not in ("offer", "buy", "message"):
+        return jsonify(error="Action inconnue"), 400
+    l = analyst.public_listing(l)
+    sug = suggest_offer(l, monitor.robot.settings())
+    amount = _num(data.get("amount")) or (sug["offer"] if kind == "offer" else l.get("price"))
+    message = data.get("message") or (sug["message"] if kind != "buy" else None)
+    return jsonify(monitor.robot.create(l, kind, amount, message, "user"))
+
+
+@app.get("/api/robot/next")
+def robot_next():
+    r = monitor.robot
+    r.executor.update(last_poll=time.time(), platform=request.args.get("platform"),
+                      version=request.args.get("version"))
+    if request.args.get("logged_in") in ("0", "1"):
+        r.executor["logged_in"] = request.args.get("logged_in") == "1"
+    a = r.next_action(background=request.args.get("background") == "1")
+    return jsonify(a or {})
+
+
+@app.post("/api/robot/actions/<int:aid>")
+def robot_report(aid):
+    d = request.get_json(force=True) or {}
+    a = monitor.robot.report(aid, d.get("status", "failed"), d.get("detail", ""), d.get("debug"), d.get("checkout_url"))
+    return jsonify(a or {})
+
+
+@app.post("/api/robot/actions/<int:aid>/cancel")
+def robot_cancel(aid):
+    monitor.robot.cancel(aid)
+    return jsonify(ok=True)
+
+
+@app.post("/api/robot/actions/<int:aid>/paid")
+def robot_paid(aid):
+    a = monitor.robot.report(aid, "paid", "Paiement confirmé par toi")
+    return jsonify(a or {})
+
+
+@app.post("/api/robot/executor")
+def robot_executor():
+    d = request.get_json(force=True) or {}
+    if "logged_in" in d:
+        monitor.robot.executor["logged_in"] = bool(d["logged_in"])
+    monitor.robot.executor["last_poll"] = time.time()
+    return jsonify(ok=True)
+
+
+@app.post("/api/portfolio")
+def portfolio_add():
+    return jsonify(id=monitor.robot.add_manual(request.get_json(force=True) or {}))
+
+
+@app.patch("/api/portfolio/<int:pid>")
+def portfolio_update(pid):
+    d = request.get_json(force=True) or {}
+    for k in ("sale_price", "sale_fees", "buy_price", "buy_cost", "est_value"):
+        if k in d:
+            d[k] = _num(d[k])
+    monitor.robot.update_item(pid, d)
+    return jsonify(ok=True)
+
+
+@app.delete("/api/portfolio/<int:pid>")
+def portfolio_delete(pid):
+    monitor.robot.delete_item(pid)
+    return "", 204
 
 
 @app.get("/api/listings/<int:lid>")

@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -46,6 +47,7 @@ public class MainActivity extends Activity {
         s.setUserAgentString(s.getUserAgentString() + " VintedDealsApp/1.0");
 
         web.setWebChromeClient(new WebChromeClient()); // nécessaire pour les confirm() JavaScript
+        web.addJavascriptInterface(new AppBridge(), "Android");
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -62,6 +64,24 @@ public class MainActivity extends Activity {
         MonitorService.start(this);
         askNotificationPermission();
         waitForServer();
+    }
+
+    /** Fonctions appelées par l'interface (onglet Robot, boutons Offre / Acheter). */
+    private class AppBridge {
+        @JavascriptInterface
+        public void openVinted(String url) {
+            RobotActivity.open(MainActivity.this, url == null || url.isEmpty() ? "https://www.vinted.fr/" : url, null);
+        }
+
+        @JavascriptInterface
+        public void runAction(String actionJson) {
+            RobotActivity.open(MainActivity.this, null, actionJson);
+        }
+
+        @JavascriptInterface
+        public void checkLogin() {
+            MonitorService.loginCheckSoon = true;
+        }
     }
 
     private void openExternal(Uri uri) {

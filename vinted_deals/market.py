@@ -49,6 +49,8 @@ class Market:
         self.notify = None        # fonction(listing) : alerte pépite
         self.ai_enqueue = None    # fonction(listing_id) : identification Gemini
         self.ai_ready = lambda: False
+        self.brands = None        # catalogue de marques (appris au fil des annonces)
+        self.on_new = []          # fonctions(listing) appelées pour chaque nouvelle annonce valorisée
 
     def settings(self) -> dict:
         s = dict(DEFAULT_MARKET_SETTINGS)
@@ -78,6 +80,8 @@ class Market:
             self.idx.upsert(listing)
             listing.update(self.rescore(listing))
             listing["_is_new"] = is_new
+            if is_new and self.brands and it.brand:
+                self.brands.learn(it.brand)
             if is_new and notify:
                 self._after_new(listing)
             return listing
@@ -85,13 +89,18 @@ class Market:
             log.exception("Marché : annonce %s ignorée", getattr(it, "id", "?"))
             return None
 
-    def _after_new(self, l: dict, alert: bool = True) -> None:
+    def _after_new(self, l: dict, alert: bool = True, robot: bool = True) -> None:
         s = self.settings()
         score = l.get("gem_score") or 0
         if s.get("gems_auto_ai") and self.ai_enqueue and self.ai_ready() and not l.get("ai_status") \
                 and score >= float(s.get("gems_ai_score") or 65):
             self.db.update_listing(l["id"], {"ai_status": "pending"})
             self.ai_enqueue(l["id"])
+        for fn in (self.on_new if robot else []):  # ex. le robot d'achat
+            try:
+                fn(l)
+            except Exception:
+                log.exception("Robot")
         thr = float(s.get("gems_notify_score") or 0)
         if not alert:
             if thr and score >= thr:

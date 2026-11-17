@@ -11,6 +11,9 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Log;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import com.chaquo.python.Python;
 import com.chaquo.python.android.AndroidPlatform;
 
@@ -18,6 +21,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+
+import org.json.JSONObject;
 
 /**
  * Service au premier plan : démarre le moteur Python (le même code que sur PC :
@@ -34,6 +39,12 @@ public class MonitorService extends Service {
     static volatile String startError = null;
 
     private PowerManager.WakeLock wakeLock;
+
+    // ---------- robot en arrière-plan ----------
+    static volatile boolean loginCheckSoon = true;
+    private static volatile boolean robotStarted = false;
+    private RobotEngine robot;
+    private long lastLoginCheck = 0;
 
     static void start(Context c) {
         c.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_RUNNING, true).apply();
@@ -70,6 +81,10 @@ public class MonitorService extends Service {
             if (!pythonStarted) {
                 pythonStarted = true;
                 new Thread(this::startPython, "python-start").start();
+            }
+            if (!robotStarted) {
+                robotStarted = true;
+                new Thread(this::robotLoop, "robot-poll").start();
             }
         }
         return START_STICKY;
@@ -112,6 +127,37 @@ public class MonitorService extends Service {
         } catch (Throwable t) {
             startError = t.toString();
             Log.e(TAG, "Échec du démarrage Python", t);
+        }
+    }
+
+    /** Demande au moteur les actions du robot (offres, achats) et les exécute dans un navigateur caché. */
+    private void robotLoop() {
+        Handler main = new Handler(Looper.getMainLooper());
+        while (true) {
+            try {
+                Thread.sleep(12_000);
+                if (robot == null) {
+                    main.post(() -> {
+                        if (robot == null) robot = new RobotEngine(this, null);
+                    });
+                    continue;
+                }
+                if (robot.isBusy()) continue;
+                long now = System.currentTimeMillis();
+                if (loginCheckSoon || now - lastLoginCheck > 30 * 60_000) {
+                    loginCheckSoon = false;
+                    lastLoginCheck = now;
+                    robot.run(RobotActivity.loginCheck(), (a, r, d) -> { });
+                    continue;
+                }
+                String res = Api.get("/api/robot/next?background=1&platform=android&version=" + BuildConfig.VERSION_NAME);
+                JSONObject a = new JSONObject(res.isEmpty() ? "{}" : res);
+                if (a.optLong("id", 0) > 0) robot.run(a, (act, r, d) -> { });
+            } catch (InterruptedException e) {
+                return;
+            } catch (Exception e) {
+                Log.w(TAG, "Robot : " + e);
+            }
         }
     }
 

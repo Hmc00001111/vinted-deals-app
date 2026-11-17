@@ -13,17 +13,21 @@ import requests
 from ai import DEFAULT_SETTINGS, VERDICTS, Analyzer
 from categories import parse_categories
 from db import DB
+from brands import BrandCatalog
 from market import Market, SaleTracker
+from robot import Robot
 from scoring import MIN_SAMPLES, brand_ok, evaluate, excluded_by, matches_filters
 from sources import SOURCES, Blocked, SourceError
 from sources.base import FX_TO_EUR
 
 log = logging.getLogger("deals.monitor")
 
-MIN_INTERVAL = 30  # secondes : en dessous, les sites bloquent vite
+MIN_INTERVAL = 10  # secondes (moins de 30 s : réservé à 1 ou 2 recherches prioritaires, risque de blocage)
 
 # Fonctions supplémentaires appelées pour chaque alerte : hook(row, ai_result, priority)
 NOTIFY_HOOKS: list = []
+# Notifications du robot : hook(action_id, titre, texte, url, priorité)
+ROBOT_HOOKS: list = []
 
 VERDICT_EMOJI = {"acheter": "✅", "a_verifier": "🔍", "eviter": "⛔"}
 
@@ -101,6 +105,11 @@ class Monitor(threading.Thread):
         self.market.ai_ready = self.ai.ready
         self.ai.on_identified = self._identified
         self.tracker = SaleTracker(self.market, domain)
+        self.brands = BrandCatalog(db)
+        self.market.brands = self.brands
+        self.robot = Robot(db, self.market)
+        self.robot.notify = self._robot_notify
+        self.market.on_new.append(self.robot.consider)
         self.market_next: dict[str, float] = {}
         self.status["market"] = {"scanning": None, "last": None, "error": None}
 
@@ -233,7 +242,7 @@ class Monitor(threading.Thread):
                     })
                     if listing and listing.get("_is_new"):
                         # pépite : alerte seulement si la surveillance n'alerte pas déjà (et pas au 1er scan)
-                        self.market._after_new(listing, alert=not alert and not first_scan)
+                        self.market._after_new(listing, alert=not alert and not first_scan, robot=not first_scan)
                     if alert and row_id:
                         deals += 1
                         log.info("BONNE AFFAIRE [%s/%s] %s — %.2f € (score %s)",
@@ -291,6 +300,15 @@ class Monitor(threading.Thread):
                      f"{(l.get('p_sell') or 0):.0%} de chances"],
         )
         notify(row, None, priority=(l.get("gem_score") or 0) >= 85)
+
+    def _robot_notify(self, title: str, text: str, url: str, priority: bool, aid: int) -> None:
+        for hook in ROBOT_HOOKS:
+            try:
+                hook(aid, title, text, url, priority)
+            except Exception as e:
+                log.warning("Notification robot : %s", e)
+        notify({"title": title, "url": url, "price": 0, "reasons": [text], "watch_name": "Robot"}, None, False) \
+            if not ROBOT_HOOKS else None
 
     def _identified(self, lid: int) -> None:
         l = self.db.get_listing(lid)

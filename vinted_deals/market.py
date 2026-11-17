@@ -186,11 +186,18 @@ class Market:
                 fields["price_drops"] = int(l.get("price_drops") or 0) + 1
             if st.get("price"):
                 fields["price"] = st["price"]
+            last = l.get("last_active") or l.get("last_seen") or now
             if state in ("active", "reserved"):
-                fields.update(state=state, last_active=now)
+                fields.update(state=state, last_active=now, missing=0)
             elif state == "sold":
-                last = l.get("last_active") or l.get("last_seen") or now
-                fields.update(state="sold", sold_at=(last + now) / 2, next_check=None)
+                fields.update(state="sold", sold_at=(last + now) / 2, next_check=None, sold_how="statut")
+            elif state == "missing":
+                missing = int(l.get("missing") or 0) + 1
+                fields["missing"] = missing
+                if missing >= 2:  # absente deux fois de suite de la recherche : considérée vendue
+                    fields.update(state="sold", sold_at=(last + now) / 2, next_check=None, sold_how="disparition")
+                else:
+                    fields["next_check"] = now + 3600  # on confirme dans une heure
             elif state == "removed":
                 fields.update(state="removed", next_check=None)
         self.db.update_listing(l["id"], fields)
@@ -245,8 +252,11 @@ class SaleTracker(threading.Thread):
                 ref = m.db.query_listings("source = 'vinted' AND state = 'active'", [], order="last_seen DESC", limit=1)
                 self.client.discover_item_route(ref[0]["ext_id"] if ref else l["ext_id"])
                 self.status["route"] = self.client.item_route
-            st = self.client.item_state(l["ext_id"])
+            st = self.client.item_state(l["ext_id"], l.get("title") or "", l.get("price"))
         except VintedError as e:
+            if self.client.item_route is None:  # page bloquée : nouvelle méthode au prochain tour
+                self.status["last_error"] = f"Vinted bloque la page des annonces ({e}) : changement de méthode"
+                return
             self.status.update(last_error=f"Vinted bloque la vérification ({e}) : pause 10 min",
                                paused_until=now + 600)
             return

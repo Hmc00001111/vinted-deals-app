@@ -103,8 +103,19 @@ def probe_vinted_items() -> dict:
                                       "head": r.text[:400]})
             except Exception as e:
                 out["routes"].append({"route": tpl, "error": f"{type(e).__name__}: {e}"})
+        if base.has_cffi():  # la page avec une empreinte de vrai navigateur
+            try:
+                sc = base.make_session(impersonate=True)
+                r = sc.get(f"{c.base}/items/{ids[0]}", headers=base.HTML_HEADERS, timeout=25)
+                out["html_cffi"] = {"status": r.status_code, "length": len(r.text), "state": parse_item_state(r.text)}
+            except Exception as e:
+                out["html_cffi"] = {"error": f"{type(e).__name__}: {e}"}
         out["chosen_route"] = c.discover_item_route(ids[0])
-        out["states"] = {str(i): c.item_state(i) for i in ids}
+        by_id = {it.id: it for it in items}
+        out["states"] = {str(i): c.item_state(i, by_id[i].title, by_id[i].price) for i in ids}
+        c.item_route = "search"
+        out["search_states"] = {str(i): c.item_state(i, by_id[i].title, by_id[i].price) for i in ids}
+        out["search_missing_test"] = c.item_state(1, by_id[ids[0]].title, by_id[ids[0]].price)
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {e}"
         out["trace"] = traceback.format_exc()[-1500:]

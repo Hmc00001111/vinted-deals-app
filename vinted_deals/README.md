@@ -94,7 +94,7 @@ automatiquement par Gemini.
 nourrir l'analyste et trouver des pépites en dehors de tes surveillances. Le bouton « Marques de
 revente populaires » en propose une vingtaine.
 
-Données mobiles : le suivi des ventes fait par défaut 120 vérifications par heure (réglable).
+Données mobiles : le suivi des ventes fait par défaut 60 vérifications par heure (réglable).
 
 ## Catégories
 

@@ -93,7 +93,7 @@ def probe_vinted_items() -> dict:
         out["search_count"] = len(items)
         if not items:
             return out
-        ids = [it.id for it in items[:3]]
+        ids = [it.id for it in items[:8]]
         for tpl in c.ITEM_ROUTES + ["{base}/items/{id}"]:
             url = tpl.format(api=c.api, base=c.base, id=ids[0])
             try:
@@ -113,8 +113,7 @@ def probe_vinted_items() -> dict:
         out["chosen_route"] = c.discover_item_route(ids[0])
         by_id = {it.id: it for it in items}
         out["states"] = {str(i): c.item_state(i, by_id[i].title, by_id[i].price) for i in ids}
-        c.item_route = "search"
-        out["search_states"] = {str(i): c.item_state(i, by_id[i].title, by_id[i].price) for i in ids}
+        out["search_only"] = {str(i): c._search_state(i, by_id[i].title, by_id[i].price) for i in ids}
         out["search_missing_test"] = c.item_state(1, by_id[ids[0]].title, by_id[ids[0]].price)
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {e}"

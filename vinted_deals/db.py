@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS listings (
     published_at REAL, first_seen REAL, last_seen REAL, last_active REAL,
     last_check REAL, next_check REAL, checks INTEGER DEFAULT 0,
     state TEXT DEFAULT 'active', sold_at REAL, price_drops INTEGER DEFAULT 0, origin TEXT,
-    missing INTEGER DEFAULT 0, sold_how TEXT,
+    missing INTEGER DEFAULT 0, sold_how TEXT, seen_by_check INTEGER DEFAULT 0,
     value REAL, value_low REAL, value_high REAL, value_n INTEGER, value_level TEXT,
     confidence REAL, comps TEXT, cost REAL, profit REAL, roi REAL, p_sell REAL, days_to_sell REAL,
     gem_score REAL, flags TEXT, scored_at REAL, gem_notified INTEGER DEFAULT 0,
@@ -97,7 +97,8 @@ class DB:
                 if col not in cols:
                     self.conn.execute(f"ALTER TABLE watches ADD COLUMN {col} {decl}")
             lcols = {r[1] for r in self.conn.execute("PRAGMA table_info(listings)")}
-            for col, decl in {"missing": "INTEGER DEFAULT 0", "sold_how": "TEXT"}.items():
+            for col, decl in {"missing": "INTEGER DEFAULT 0", "sold_how": "TEXT",
+                              "seen_by_check": "INTEGER DEFAULT 0"}.items():
                 if col not in lcols:
                     self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col} {decl}")
             self.conn.commit()

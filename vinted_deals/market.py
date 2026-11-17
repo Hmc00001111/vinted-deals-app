@@ -19,7 +19,7 @@ DEFAULT_MARKET_SETTINGS = {
     "market_terms": "",          # marques / mots-clés scannés en continu pour nourrir l'analyste
     "market_interval": 600,      # secondes entre deux scans d'un même terme
     "tracker_enabled": True,     # suivi des ventes (re-vérification des annonces Vinted)
-    "tracker_per_hour": 120,     # vérifications par heure (données mobiles : rester raisonnable)
+    "tracker_per_hour": 60,      # vérifications par heure (données mobiles : rester raisonnable)
     "gems_notify_score": 75,     # alerte pépite à partir de ce score (0 = jamais)
     "gems_auto_ai": True,        # faire identifier automatiquement les meilleures pépites par Gemini
     "gems_ai_score": 65,
@@ -188,9 +188,11 @@ class Market:
                 fields["price"] = st["price"]
             last = l.get("last_active") or l.get("last_seen") or now
             if state in ("active", "reserved"):
-                fields.update(state=state, last_active=now, missing=0)
+                fields.update(state=state, last_active=now, missing=0, seen_by_check=1)
             elif state == "sold":
                 fields.update(state="sold", sold_at=(last + now) / 2, next_check=None, sold_how="statut")
+            elif state == "missing" and not l.get("seen_by_check"):
+                pass  # jamais retrouvée par la recherche : son absence ne prouve rien
             elif state == "missing":
                 missing = int(l.get("missing") or 0) + 1
                 fields["missing"] = missing
@@ -276,5 +278,5 @@ class SaleTracker(threading.Thread):
                 self.status["sold"] += 1
         m.apply_check(l, st)
         self.status.update(checked=self.status["checked"] + 1, last_check=time.time(), last_error=None)
-        per_hour = max(10, min(1200, int(float(s.get("tracker_per_hour") or 120))))
+        per_hour = max(10, min(1200, int(float(s.get("tracker_per_hour") or 60))))
         time.sleep(max(0.0, 3600 / per_hour - 2.5))

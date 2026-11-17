@@ -364,27 +364,28 @@ class VintedClient:
                 return tpl
             if r.status_code in (401, 403, 429):
                 continue
-        # page HTML de l'annonce : utilisable seulement si elle n'est pas bloquée
-        try:
-            st = self._html_state(known_active_id)
-            if st and st["state"] in ("active", "reserved"):
-                self.item_route = "html"
-                log.info("Détail d'annonce Vinted : lecture de la page HTML")
-                return "html"
-        except (VintedError, requests.RequestException):
-            pass
-        # dernier recours : l'annonce est-elle toujours trouvable dans la recherche ?
+        # pas de route JSON : on suit l'annonce par sa présence dans la recherche (léger, marche partout),
+        # avec confirmation par la page de l'annonce quand curl_cffi est installé (PC)
         self.item_route = "search"
-        log.info("Détail d'annonce Vinted bloqué : suivi par présence dans la recherche")
+        log.info("Suivi des annonces Vinted : présence dans la recherche%s",
+                 " + page de l'annonce" if _has_cffi() else "")
         return "search"
 
     def item_state(self, item_id: int | str, title: str = "", price: float | None = None) -> dict | None:
         """{'state': 'active'|'reserved'|'sold'|'removed'|'missing', 'price': float|None, 'favourites': int|None}
         ou None si on ne sait pas dire (page illisible). Lève VintedError en cas de blocage.
         'missing' : l'annonce n'apparaît plus dans la recherche (vendue ou retirée, à confirmer)."""
-        route = self.item_route or "html"
+        route = self.item_route or "search"
         if route == "search":
-            return self._search_state(item_id, title, price)
+            st = self._search_state(item_id, title, price)
+            if st and st["state"] == "missing" and _has_cffi():
+                try:  # confirmation définitive (vendue / supprimée / toujours là) par la page
+                    page = self._html_state(item_id)
+                    if page and page["state"] != "unknown":
+                        return page
+                except (VintedError, requests.RequestException, Exception):
+                    pass
+            return st
         if route != "html":
             url = route.format(api=self.api, base=self.base, id=item_id)
             r = self._get(url, headers=self._api_headers())
@@ -402,20 +403,34 @@ class VintedClient:
         """Cherche l'annonce par son titre (et son prix) : présente = en vente, absente = disparue."""
         if not title:
             return None
-        text = " ".join(title.split()[:8])
-        kw = {}
-        if price:
-            kw = {"price_from": max(0.5, round(price - 0.5, 2)), "price_to": round(price + 0.5, 2)}
-        for attempt in (kw, {}):  # si le filtre de prix n'est pas compris, on réessaie sans
-            items = self.search(text, page=1, per_page=96 if attempt else 48, order="relevance", **attempt)
+        words = title.split()
+        pf = {"price_from": max(0.5, round(price - 0.5, 2)), "price_to": round(price + 0.5, 2)} if price else {}
+        attempts = [(" ".join(words[:8]), pf, "relevance"), (" ".join(words[:8]), {}, "relevance"),
+                    (" ".join(words[:3]), pf, "newest_first")]
+        answered = 0
+        for text, kw, order in attempts:
+            items = self.search(text, page=1, per_page=96, order=order, **kw)
             for it in items:
                 if str(it.id) == str(item_id):
                     return {"state": "active", "price": it.price, "favourites": it.favourites}
-            if items and (not attempt or all(abs(i.price - price) <= 1 for i in items)):
-                return {"state": "missing", "price": None, "favourites": None}
-        return None
+            if items:
+                answered += 1
+        # introuvable alors que la recherche répond : vendue ou retirée (à confirmer par un 2e passage)
+        return {"state": "missing", "price": None, "favourites": None} if answered >= 2 else None
 
     def _html_state(self, item_id: int | str) -> dict | None:
+        if _has_cffi():  # empreinte de vrai navigateur : la page passe la protection anti-robot
+            from sources.base import HTML_HEADERS, make_session
+            if getattr(self, "_page_session", None) is None:
+                self._page_session = make_session(impersonate=True)
+            self._throttle()
+            r = self._page_session.get(f"{self.base}/items/{item_id}", headers=HTML_HEADERS, timeout=30)
+            if r.status_code in (404, 410) or (r.status_code == 200 and f"/items/{item_id}" not in str(r.url)):
+                return {"state": "removed", "price": None, "favourites": None}
+            if r.status_code != 200:
+                self._page_session = None
+                raise VintedError(f"HTTP {r.status_code} (page annonce)")
+            return parse_item_state(r.text)
         # page HTML de l'annonce (lecture partielle)
         page_headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                         "Accept-Language": f"{self.locale},en;q=0.5"}
@@ -447,6 +462,14 @@ class VintedClient:
 
 
 import re as _re
+
+
+def _has_cffi() -> bool:
+    try:
+        import curl_cffi  # noqa: F401
+        return True
+    except Exception:
+        return False
 
 _B = r'\\?"'  # guillemet éventuellement échappé (données Next.js / RSC)
 
